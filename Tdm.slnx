@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tdm.Core/Tdm.Core.csproj" />
+    <Project Path="src/Tdm.EfCore/Tdm.EfCore.csproj" />
+    <Project Path="src/Tdm.Host/Tdm.Host.csproj" />
+    <Project Path="src/Tdm.Identity/Tdm.Identity.csproj" />
+    <Project Path="src/Tdm.Observability/Tdm.Observability.csproj" />
+    <Project Path="src/Tdm.Plugins/Tdm.Plugins.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Acme.Billing.Data.Infrastructure/Acme.Billing.Data.Infrastructure.csproj" />
+    <Project Path="tests/Acme.Orders.Data.Persistence/Acme.Orders.Data.Persistence.csproj" />
+    <Project Path="tests/Tdm.Core.Tests/Tdm.Core.Tests.csproj" />
+    <Project Path="tests/Tdm.EfCore.Tests/Tdm.EfCore.Tests.csproj" />
+    <Project Path="tests/Tdm.Integration.Tests/Tdm.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

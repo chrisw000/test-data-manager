@@ -1,0 +1,12 @@
+bin/
+obj/
+output/
+plugins/
+*.user
+*.tdm.json
+*.db
+*.db-shm
+*.db-wal
+.vs/
+.idea/
+TestResults/

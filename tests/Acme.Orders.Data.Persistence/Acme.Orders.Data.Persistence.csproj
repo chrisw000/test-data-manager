@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Sample domain plugin ("modern" convention profile): {Name}Entity classes, repositories, fakers. Simulates a domain data package published to the org NuGet feed.</Description>
+    <!-- Self-contained bin output so the folder can be plugin-loaded by the TDM host. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bogus" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+
+</Project>

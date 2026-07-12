@@ -1,0 +1,44 @@
+{
+  // Demo settings: runs the example features against both sample domains on SQLite.
+  // Plugin folders point at the sample domains' build output — in production these are
+  // populated by NuGet restore of the domain data packages (handoff §3).
+  "run": {
+    "name": "sample-domains-demo",
+    "failurePolicy": "BestEffort",
+    "lifecycle": "Persistent",
+    "defaultSeed": 1,
+    "featurePaths": ["features/**/*.feature"],
+    "benchmark": true,
+    "outputPath": "./output"
+  },
+  "domains": [
+    {
+      "name": "Orders",
+      "package": "Acme.Orders.Data.Persistence",
+      "pluginPath": "tests/Acme.Orders.Data.Persistence/bin/Debug/net10.0",
+      "provider": "Sqlite",
+      "connectionString": "Data Source=./output/orders-demo.db",
+      "conventionProfile": "modern",
+      "persistence": "RepositoryFirst",
+      "ensureCreated": true
+    },
+    {
+      "name": "Billing",
+      "package": "Acme.Billing.Data.Infrastructure",
+      "pluginPath": "tests/Acme.Billing.Data.Infrastructure/bin/Debug/net10.0",
+      "provider": "Sqlite",
+      "connectionString": "Data Source=./output/billing-demo.db",
+      "conventionProfile": "legacy",
+      "persistence": "DbContextOnly",
+      "externalReferences": "Synthesize",
+      "ensureCreated": true
+    }
+  ],
+  "entities": {
+    "Product": { "naturalKey": "Sku" },
+    "Order": { "naturalKey": "OrderNumber" },
+    "Invoice": { "naturalKey": "InvoiceNumber" },
+    "Customer": { "externalBehavior": "Projection", "projectionEntity": "CustomerSummary" },
+    "CustomerSummary": { "naturalKey": "Name" }
+  }
+}

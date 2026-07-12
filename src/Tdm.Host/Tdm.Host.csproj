@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>tdm</AssemblyName>
+    <Description>TDM console host: run | teardown | validate | list-entities.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tdm.Core\Tdm.Core.csproj" />
+    <ProjectReference Include="..\Tdm.EfCore\Tdm.EfCore.csproj" />
+    <ProjectReference Include="..\Tdm.Plugins\Tdm.Plugins.csproj" />
+    <ProjectReference Include="..\Tdm.Observability\Tdm.Observability.csproj" />
+  </ItemGroup>
+
+</Project>
