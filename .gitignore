@@ -1,5 +1,7 @@
 bin/
 obj/
+# Reqnroll build-time generated code-behind
+*.feature.cs
 output/
 plugins/
 *.user
