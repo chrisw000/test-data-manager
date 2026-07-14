@@ -41,6 +41,9 @@ public sealed class RunInfo
     public string IdentityContractVersion { get; set; } = "";
     public bool DryRun { get; set; }
     public RunOutcome Outcome { get; set; }
+    /// <summary>Resolved plugin package versions per domain ("{domain}:{packageId}" → version)
+    /// when NuGet acquisition is used — a run is reproducible down to the plugin version (W1-D2).</summary>
+    public Dictionary<string, string> PluginPackages { get; set; } = [];
     public Dictionary<string, BenchmarkStats> Benchmark { get; set; } = [];
 }
 

@@ -7,7 +7,9 @@ namespace Tdm.Plugins;
 public sealed record LoadedPlugin(
     string DomainName,
     PluginLoadContext LoadContext,
-    IReadOnlyList<Assembly> Assemblies);
+    IReadOnlyList<Assembly> Assemblies,
+    /// <summary>Resolved package versions (packageId → version) when a feed acquirer ran; empty for folder acquisition.</summary>
+    IReadOnlyDictionary<string, string> Packages);
 
 /// <summary>
 /// Loads a domain's plugin folder into an isolated <see cref="PluginLoadContext"/> and
@@ -18,7 +20,8 @@ public sealed class PluginLoader(IPluginAcquirer acquirer, ILogger? logger = nul
 {
     public async Task<LoadedPlugin> LoadAsync(DomainSettings domain, CancellationToken ct = default)
     {
-        var folder = await acquirer.AcquireAsync(domain, ct).ConfigureAwait(false);
+        var acquired = await acquirer.AcquireAsync(domain, ct).ConfigureAwait(false);
+        var folder = acquired.Folder;
         var context = new PluginLoadContext($"tdm-plugin-{domain.Name}", folder);
 
         var assemblies = new List<Assembly>();
@@ -42,7 +45,7 @@ public sealed class PluginLoader(IPluginAcquirer acquirer, ILogger? logger = nul
         ValidateEfVersion(domain, assemblies);
         logger?.LogInformation("Domain {Domain}: loaded {Count} plugin assembl{Suffix} from {Folder}",
             domain.Name, assemblies.Count, assemblies.Count == 1 ? "y" : "ies", folder);
-        return new LoadedPlugin(domain.Name, context, assemblies);
+        return new LoadedPlugin(domain.Name, context, assemblies, acquired.Packages);
     }
 
     private static void ValidateEfVersion(DomainSettings domain, IReadOnlyList<Assembly> assemblies)

@@ -20,29 +20,35 @@ var lifecycleOption = new Option<LifecycleMode?>("--lifecycle") { Description = 
 var benchmarkOption = new Option<bool?>("--benchmark") { Description = "Override run.benchmark" };
 var manifestOption = new Option<string>("--manifest") { Description = "Path to a .tdm.json manifest", Required = true };
 var domainOption = new Option<string?>("--domain") { Description = "Restrict to one domain" };
+var updatePluginsOption = new Option<bool>("--update-plugins")
+{
+    Description = "Re-resolve plugin package versions, ignoring tdm.plugins.lock.json",
+};
 
 var root = new RootCommand("TDM — Gherkin-driven Test Data Manager");
 
 var runCommand = new Command("run", "Parse feature files, seed data, write the run manifest.")
 {
-    settingsOption, seedOption, policyOption, lifecycleOption, benchmarkOption,
+    settingsOption, seedOption, policyOption, lifecycleOption, benchmarkOption, updatePluginsOption,
 };
 runCommand.SetAction(async (parseResult, ct) =>
 {
     var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!,
         parseResult.GetValue(seedOption), parseResult.GetValue(policyOption),
-        parseResult.GetValue(lifecycleOption), parseResult.GetValue(benchmarkOption));
+        parseResult.GetValue(lifecycleOption), parseResult.GetValue(benchmarkOption),
+        parseResult.GetValue(updatePluginsOption));
     return await composer.RunAsync(dryRun: false, ct);
 });
 
 var validateCommand = new Command("validate", "Parse features and resolve entities/fakers/repositories; persist nothing (CI dry run).")
 {
-    settingsOption, policyOption,
+    settingsOption, policyOption, updatePluginsOption,
 };
 validateCommand.SetAction(async (parseResult, ct) =>
 {
     var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!,
-        seed: null, parseResult.GetValue(policyOption), lifecycle: null, benchmark: null);
+        seed: null, parseResult.GetValue(policyOption), lifecycle: null, benchmark: null,
+        parseResult.GetValue(updatePluginsOption));
     return await composer.RunAsync(dryRun: true, ct);
 });
 
@@ -80,13 +86,15 @@ namespace Tdm.Host
     {
         private readonly TdmSettings _settings;
         private readonly string _baseDirectory;
+        private readonly bool _updatePlugins;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _log;
 
-        private HostComposer(TdmSettings settings, string baseDirectory)
+        private HostComposer(TdmSettings settings, string baseDirectory, bool updatePlugins)
         {
             _settings = settings;
             _baseDirectory = baseDirectory;
+            _updatePlugins = updatePlugins;
             _loggerFactory = LoggerFactory.Create(builder => builder
                 .AddSimpleConsole(o =>
                 {
@@ -98,7 +106,7 @@ namespace Tdm.Host
         }
 
         public static HostComposer Create(string settingsPath, int? seed, FailurePolicy? policy,
-            LifecycleMode? lifecycle, bool? benchmark)
+            LifecycleMode? lifecycle, bool? benchmark, bool updatePlugins = false)
         {
             var fullPath = Path.GetFullPath(settingsPath);
             var settings = TdmSettings.Load(fullPath);
@@ -106,7 +114,7 @@ namespace Tdm.Host
             if (policy is { } p) settings.Run.FailurePolicy = p;
             if (lifecycle is { } l) settings.Run.Lifecycle = l;
             if (benchmark is { } b) settings.Run.Benchmark = b;
-            return new HostComposer(settings, Path.GetDirectoryName(fullPath)!);
+            return new HostComposer(settings, Path.GetDirectoryName(fullPath)!, updatePlugins);
         }
 
         public async Task<int> RunAsync(bool dryRun, CancellationToken ct)
@@ -134,6 +142,11 @@ namespace Tdm.Host
 
                 var engine = new TdmEngine(_settings, runtimes, _loggerFactory.CreateLogger<TdmEngine>());
                 var manifest = await engine.RunAsync(plan, dryRun, ct);
+
+                // Reproducibility down to the plugin version (W1-D2).
+                foreach (var plugin in plugins)
+                foreach (var (packageId, version) in plugin.Packages)
+                    manifest.Run.PluginPackages[$"{plugin.DomainName}:{packageId}"] = version;
 
                 var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
                 var manifestFile = ManifestWriter.Write(manifest, outputPath);
@@ -226,7 +239,10 @@ namespace Tdm.Host
 
         private async Task<(List<IDomainRuntime> Runtimes, List<LoadedPlugin> Plugins)> BuildRuntimesAsync(CancellationToken ct)
         {
-            var loader = new PluginLoader(new FolderPluginAcquirer(_baseDirectory), _log);
+            IPluginAcquirer acquirer = _settings.Plugins.Acquisition == PluginAcquisitionMode.NuGet
+                ? new NuGetPluginAcquirer(_settings.Plugins, _baseDirectory, _log) { UpdatePlugins = _updatePlugins }
+                : new FolderPluginAcquirer(_baseDirectory);
+            var loader = new PluginLoader(acquirer, _log);
             var runtimes = new List<IDomainRuntime>();
             var plugins = new List<LoadedPlugin>();
             foreach (var domain in _settings.Domains)

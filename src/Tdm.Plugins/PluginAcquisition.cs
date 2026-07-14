@@ -2,22 +2,23 @@ using Tdm.Core.Settings;
 
 namespace Tdm.Plugins;
 
+/// <summary>Result of acquisition: the folder to load, plus the resolved package versions
+/// (packageId → version) when a feed-based acquirer ran — recorded into the run manifest.</summary>
+public sealed record AcquiredPlugin(string Folder, IReadOnlyDictionary<string, string> Packages)
+{
+    public static AcquiredPlugin FromFolder(string folder) =>
+        new(folder, new Dictionary<string, string>());
+}
+
 /// <summary>
 /// Materialises a domain's plugin assemblies into a local folder before loading.
-/// Implementations: <see cref="FolderPluginAcquirer"/> (shipped) and a NuGet-feed acquirer
-/// (extension point — see remarks).
+/// Implementations: <see cref="FolderPluginAcquirer"/> (default) and
+/// <see cref="NuGetPluginAcquirer"/> (W1-D2, feed acquisition with a lockfile).
 /// </summary>
-/// <remarks>
-/// The intended production extension is a NuGet.Protocol-based acquirer that restores the
-/// domain's data package (<c>DomainSettings.Package</c>, e.g. "Acme.Orders.Data.Persistence")
-/// plus non-shared transitive dependencies from the internal feed into
-/// <c>./plugins/{domain}</c> — exactly what already happens for the production API build.
-/// Implement this interface and pass it to <c>PluginLoader</c>; nothing else changes.
-/// </remarks>
 public interface IPluginAcquirer
 {
     /// <summary>Returns the folder containing the domain's assemblies, acquiring them if needed.</summary>
-    Task<string> AcquireAsync(DomainSettings domain, CancellationToken ct = default);
+    Task<AcquiredPlugin> AcquireAsync(DomainSettings domain, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -28,7 +29,7 @@ public sealed class FolderPluginAcquirer(string? baseDirectory = null) : IPlugin
 {
     private readonly string _baseDirectory = baseDirectory ?? Directory.GetCurrentDirectory();
 
-    public Task<string> AcquireAsync(DomainSettings domain, CancellationToken ct = default)
+    public Task<AcquiredPlugin> AcquireAsync(DomainSettings domain, CancellationToken ct = default)
     {
         var folder = domain.PluginPath is { Length: > 0 } explicitPath
             ? Path.GetFullPath(explicitPath, _baseDirectory)
@@ -40,6 +41,6 @@ public sealed class FolderPluginAcquirer(string? baseDirectory = null) : IPlugin
                 $"Plugin folder for domain '{domain.Name}' not found: {folder}. " +
                 "Populate it (e.g. via NuGet restore of the domain data package) or set domains[].pluginPath.");
         }
-        return Task.FromResult(folder);
+        return Task.FromResult(AcquiredPlugin.FromFolder(folder));
     }
 }

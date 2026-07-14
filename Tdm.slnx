@@ -13,5 +13,6 @@
     <Project Path="tests/Tdm.Core.Tests/Tdm.Core.Tests.csproj" />
     <Project Path="tests/Tdm.EfCore.Tests/Tdm.EfCore.Tests.csproj" />
     <Project Path="tests/Tdm.Integration.Tests/Tdm.Integration.Tests.csproj" />
+    <Project Path="tests/Tdm.Plugins.Tests/Tdm.Plugins.Tests.csproj" />
   </Folder>
 </Solution>

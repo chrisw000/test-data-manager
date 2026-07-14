@@ -9,6 +9,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <!-- Only for host-vs-plugin EF version validation (fail fast on skew). -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <!-- Feed-based plugin acquisition (W1-D2). -->
+    <PackageReference Include="NuGet.Protocol" />
   </ItemGroup>
 
   <ItemGroup>

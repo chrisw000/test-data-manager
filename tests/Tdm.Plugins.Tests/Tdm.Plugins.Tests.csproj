@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tdm.Plugins\Tdm.Plugins.csproj" />
+    <!-- Feed fixture builds .nupkg files around this sample domain's assemblies. -->
+    <ProjectReference Include="..\Acme.Orders.Data.Persistence\Acme.Orders.Data.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>

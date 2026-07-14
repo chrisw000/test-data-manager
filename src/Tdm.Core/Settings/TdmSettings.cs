@@ -19,6 +19,7 @@ public enum ExternalBehavior { FkOnly, Projection }
 public sealed class TdmSettings
 {
     public RunSettings Run { get; set; } = new();
+    public PluginsSettings Plugins { get; set; } = new();
     public List<DomainSettings> Domains { get; set; } = [];
     public Dictionary<string, ConventionProfile> ConventionProfiles { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
@@ -77,11 +78,38 @@ public sealed class RunSettings
     public string OutputPath { get; set; } = "./output";
 }
 
+public enum PluginAcquisitionMode { Folder, NuGet }
+
+/// <summary>Plugin acquisition settings (W1-D2). Folder is the default (current behaviour);
+/// NuGet resolves domains[].package from the configured feeds with a lockfile.</summary>
+public sealed class PluginsSettings
+{
+    public PluginAcquisitionMode Acquisition { get; set; } = PluginAcquisitionMode.Folder;
+    public List<PluginFeedSettings> Feeds { get; set; } = [];
+    /// <summary>Downloaded .nupkg cache; defaults to ~/.tdm/cache.</summary>
+    public string? CachePath { get; set; }
+
+    public string ResolveCachePath() =>
+        string.IsNullOrWhiteSpace(CachePath)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".tdm", "cache")
+            : Path.GetFullPath(CachePath);
+}
+
+/// <summary>Feed auth goes through the standard NuGet credential chain (nuget.config /
+/// environment / credential providers) — TDM implements no custom secret handling.</summary>
+public sealed class PluginFeedSettings
+{
+    public string Url { get; set; } = "";
+}
+
 public sealed class DomainSettings
 {
     public string Name { get; set; } = "";
     /// <summary>NuGet package id of the domain data assembly (resolved into the plugin folder).</summary>
     public string? Package { get; set; }
+    /// <summary>Version or floating range for <see cref="Package"/> (e.g. "3.2.1", "3.2.*").
+    /// Omit for latest stable. The resolved version is pinned in tdm.plugins.lock.json.</summary>
+    public string? PackageVersion { get; set; }
     /// <summary>Explicit plugin folder; defaults to ./plugins/{Name} when omitted.</summary>
     public string? PluginPath { get; set; }
     /// <summary>Sqlite | SqlServer. Provider assemblies ship with the TDM host.</summary>
