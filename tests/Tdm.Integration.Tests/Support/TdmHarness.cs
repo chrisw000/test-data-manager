@@ -6,6 +6,7 @@ using Tdm.Core.Grammar;
 using Tdm.Core.Manifest;
 using Tdm.Core.Settings;
 using Tdm.EfCore;
+using Xunit;
 
 namespace Tdm.Integration.Tests.Support;
 
@@ -19,6 +20,8 @@ public sealed class TdmHarness : IDisposable
     private readonly string _directory =
         Path.Combine(Path.GetTempPath(), "tdm-integration-tests", Guid.NewGuid().ToString("N"));
     private readonly List<IDomainRuntime> _runtimes = [];
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     public TdmHarness()
     {
@@ -84,7 +87,7 @@ public sealed class TdmHarness : IDisposable
             _runtimes.Add(DomainRuntimeBuilder.Build(Settings.Domains[1], Settings, [typeof(BillingDbContext).Assembly]));
         }
         var plan = new SeedingPlan { Features = { new GherkinPlanParser().ParseText(tdmFeatureText) } };
-        Manifest = await new TdmEngine(Settings, _runtimes).RunAsync(plan, dryRun);
+        Manifest = await new TdmEngine(Settings, _runtimes).RunAsync(plan, dryRun, Ct);
         return Manifest;
     }
 
@@ -92,7 +95,7 @@ public sealed class TdmHarness : IDisposable
     public async Task<RunManifest> RunWithRuntimesAsync(string tdmFeatureText, IReadOnlyList<IDomainRuntime> runtimes)
     {
         var plan = new SeedingPlan { Features = { new GherkinPlanParser().ParseText(tdmFeatureText) } };
-        Manifest = await new TdmEngine(Settings, runtimes).RunAsync(plan);
+        Manifest = await new TdmEngine(Settings, runtimes).RunAsync(plan, ct: Ct);
         return Manifest;
     }
 

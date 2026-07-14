@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Tdm.Core.Execution;
 using Tdm.Core.Grammar;
 using Tdm.Core.Manifest;
@@ -9,6 +10,8 @@ namespace Tdm.Core.Tests.Execution;
 
 public class TdmEngineTests
 {
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     private static SeedingPlan Plan(string featureText) =>
         new() { Features = { new GherkinPlanParser().ParseText(featureText) } };
 
@@ -38,19 +41,20 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Widget exists with name "W1" and colour "Red" and size "5"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        Assert.Equal(0, manifest.ExitCode);
-        var widget = Assert.IsType<Widget>(Assert.Single(runtime.Store["Widget"]));
-        Assert.Equal(("W1", "Red", 5), (widget.Name, widget.Colour, widget.Size));
-        Assert.Equal(TdmIdentity.ForNaturalKey("Test", "Widget", "W1"), widget.Id);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        manifest.ExitCode.Should().Be(0);
+        var widget = runtime.Store["Widget"].Should().ContainSingle().Subject.Should().BeOfType<Widget>().Subject;
+        (widget.Name, widget.Colour, widget.Size).Should().Be(("W1", "Red", 5));
+        widget.Id.Should().Be(TdmIdentity.ForNaturalKey("Test", "Widget", "W1"));
 
-        var entry = Assert.Single(Assert.Single(manifest.Scenarios).Entities);
-        Assert.Equal("FakeStore", entry.PersistedVia);
-        Assert.Equal(["Name", "Colour", "Size"], entry.OverridesApplied);
-        Assert.Equal("W1", entry.NaturalKey);
-        Assert.Equal("Red", entry.Values["Colour"]);
+        var scenario = manifest.Scenarios.Should().ContainSingle().Subject;
+        var entry = scenario.Entities.Should().ContainSingle().Subject;
+        entry.PersistedVia.Should().Be("FakeStore");
+        entry.OverridesApplied.Should().Equal("Name", "Colour", "Size");
+        entry.NaturalKey.Should().Be("W1");
+        entry.Values["Colour"].Should().Be("Red");
     }
 
     [Fact]
@@ -65,13 +69,13 @@ public class TdmEngineTests
                 Given a Widget exists with name "W1" and colour "Red"
               Scenario: B
                 Given a Widget exists with name "W1" and colour "Blue"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        var widget = Assert.IsType<Widget>(Assert.Single(runtime.Store["Widget"]));
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        var widget = runtime.Store["Widget"].Should().ContainSingle().Subject.Should().BeOfType<Widget>().Subject;
         // Declared state re-applied on reuse.
-        Assert.Equal("Blue", widget.Colour);
-        Assert.StartsWith("already-existed", manifest.Scenarios[1].Entities[0].PersistedVia);
+        widget.Colour.Should().Be("Blue");
+        manifest.Scenarios[1].Entities[0].PersistedVia.Should().StartWith("already-existed");
     }
 
     [Fact]
@@ -84,14 +88,14 @@ public class TdmEngineTests
             Feature: F
               Scenario: Bulk
                 Given 5 Widgets exist with colour "Grey"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        Assert.Equal(5, runtime.Store["Widget"].Count);
-        Assert.Contains("createBulk:Widget:5", runtime.Calls);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        runtime.Store["Widget"].Should().HaveCount(5);
+        runtime.Calls.Should().Contain("createBulk:Widget:5");
         var ids = runtime.Store["Widget"].Cast<Widget>().Select(w => w.Id).ToList();
-        Assert.Equal(5, ids.Distinct().Count());
-        Assert.Equal(TdmIdentity.ForOrdinal("Test", "Widget", "Bulk", 1, 1), ids[0]);
+        ids.Should().OnlyHaveUniqueItems();
+        ids[0].Should().Be(TdmIdentity.ForOrdinal("Test", "Widget", "Bulk", 1, 1));
     }
 
     [Fact]
@@ -105,11 +109,11 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        Assert.Equal(1, manifest.ExitCode);
-        Assert.Empty(runtime.Store["Widget"]);
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        manifest.ExitCode.Should().Be(1);
+        runtime.Store["Widget"].Should().BeEmpty();
     }
 
     // ---------------------------------------------------------------- References
@@ -125,14 +129,14 @@ public class TdmEngineTests
               Scenario: S
                 Given a Widget exists with name "W1"
                 And a Gadget exists for Widget "W1" with name "G1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        var widget = Assert.IsType<Widget>(runtime.Store["Widget"][0]);
-        var gadget = Assert.IsType<Gadget>(runtime.Store["Gadget"][0]);
-        Assert.Equal(widget.Id, gadget.WidgetId);
-        var reference = Assert.Single(Assert.Single(manifest.Scenarios).References);
-        Assert.Equal("contextBag", reference.ResolvedFrom);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        var widget = runtime.Store["Widget"][0].Should().BeOfType<Widget>().Subject;
+        var gadget = runtime.Store["Gadget"][0].Should().BeOfType<Gadget>().Subject;
+        gadget.WidgetId.Should().Be(widget.Id);
+        var scenario = manifest.Scenarios.Should().ContainSingle().Subject;
+        scenario.References.Should().ContainSingle().Which.ResolvedFrom.Should().Be("contextBag");
     }
 
     [Fact]
@@ -147,11 +151,11 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Gadget exists for Widget "PreSeeded" with name "G1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        Assert.Equal(existing.Id, Assert.IsType<Gadget>(runtime.Store["Gadget"][0]).WidgetId);
-        Assert.Equal("database", Assert.Single(manifest.Scenarios[0].References).ResolvedFrom);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        runtime.Store["Gadget"][0].Should().BeOfType<Gadget>().Which.WidgetId.Should().Be(existing.Id);
+        manifest.Scenarios[0].References.Should().ContainSingle().Which.ResolvedFrom.Should().Be("database");
     }
 
     [Fact]
@@ -164,10 +168,10 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Gadget exists for Widget "Ghost" with name "G1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        Assert.Contains(manifest.Scenarios[0].Warnings, w => w.Contains("Ghost"));
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        manifest.Scenarios[0].Warnings.Should().Contain(w => w.Contains("Ghost"));
     }
 
     [Fact]
@@ -181,16 +185,16 @@ public class TdmEngineTests
               Scenario: S
                 Given an external Widget reference "W9" from CRM
                 And a Gadget exists for Widget "W9" with name "G1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
         var expected = TdmIdentity.ForNaturalKey("CRM", "Widget", "W9");
-        Assert.Equal(expected, Assert.IsType<Gadget>(runtime.Store["Gadget"][0]).WidgetId);
+        runtime.Store["Gadget"][0].Should().BeOfType<Gadget>().Which.WidgetId.Should().Be(expected);
         var external = manifest.Scenarios[0].References.First(r => r.ResolvedFrom == "identityContract");
-        Assert.Equal("CRM", external.OwningDomain);
-        Assert.Equal(expected.ToString(), external.Id);
+        external.OwningDomain.Should().Be("CRM");
+        external.Id.Should().Be(expected.ToString());
         // Nothing persisted in the owning domain — no Widget row was created.
-        Assert.Empty(runtime.Store["Widget"]);
+        runtime.Store["Widget"].Should().BeEmpty();
     }
 
     // ---------------------------------------------------------------- Failure policies
@@ -205,15 +209,15 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Widget exists with name "W1" and size "not-a-number"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        var widget = Assert.IsType<Widget>(Assert.Single(runtime.Store["Widget"]));
-        Assert.Equal("W1", widget.Name);
-        Assert.Equal(0, widget.Size); // skipped, left at default
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        var widget = runtime.Store["Widget"].Should().ContainSingle().Subject.Should().BeOfType<Widget>().Subject;
+        widget.Name.Should().Be("W1");
+        widget.Size.Should().Be(0); // skipped, left at default
         var entry = manifest.Scenarios[0].Entities[0];
-        Assert.Contains(entry.Warnings, w => w.Contains("Size"));
-        Assert.DoesNotContain("Size", entry.OverridesApplied);
+        entry.Warnings.Should().Contain(w => w.Contains("Size"));
+        entry.OverridesApplied.Should().NotContain("Size");
     }
 
     [Fact]
@@ -227,12 +231,12 @@ public class TdmEngineTests
               Scenario: S
                 Given a Widget exists with name "W1" and size "not-a-number"
                 And a Widget exists with name "W2" and size "3"
-            """));
+            """), ct: Ct);
 
         // The bad object is rejected; the scenario continues and the good one persists.
-        Assert.Empty(runtime.Store["Widget"].Cast<Widget>().Where(w => w.Name == "W1"));
-        Assert.Single(runtime.Store["Widget"].Cast<Widget>(), w => w.Name == "W2");
-        Assert.NotEqual(RunOutcome.Succeeded, manifest.Run.Outcome);
+        runtime.Store["Widget"].Cast<Widget>().Should().NotContain(w => w.Name == "W1");
+        runtime.Store["Widget"].Cast<Widget>().Should().ContainSingle(w => w.Name == "W2");
+        manifest.Run.Outcome.Should().NotBe(RunOutcome.Succeeded);
     }
 
     [Fact]
@@ -247,12 +251,12 @@ public class TdmEngineTests
                 Given a Widget exists with name "W1" and size "not-a-number"
               Scenario: NeverRuns
                 Given a Widget exists with name "W2"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Failed, manifest.Run.Outcome);
-        Assert.Equal(2, manifest.ExitCode);
-        Assert.Single(manifest.Scenarios); // second scenario never started
-        Assert.DoesNotContain(runtime.Store["Widget"].Cast<Widget>(), w => w.Name == "W2");
+        manifest.Run.Outcome.Should().Be(RunOutcome.Failed);
+        manifest.ExitCode.Should().Be(2);
+        manifest.Scenarios.Should().ContainSingle(); // second scenario never started
+        runtime.Store["Widget"].Cast<Widget>().Should().NotContain(w => w.Name == "W2");
     }
 
     [Fact]
@@ -266,12 +270,12 @@ public class TdmEngineTests
               Scenario: S
                 Given something entirely ungrammatical happens
                 And a Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        var unmatched = Assert.Single(manifest.Scenarios[0].UnmatchedSteps);
-        Assert.Contains("ungrammatical", unmatched.Text);
-        Assert.Single(runtime.Store["Widget"]); // the typo did not kill the scenario
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        manifest.Scenarios[0].UnmatchedSteps.Should().ContainSingle()
+            .Which.Text.Should().Contain("ungrammatical");
+        runtime.Store["Widget"].Should().ContainSingle(); // the typo did not kill the scenario
     }
 
     // ---------------------------------------------------------------- Tags & lifecycle plumbing
@@ -287,11 +291,11 @@ public class TdmEngineTests
               @skip
               Scenario: S
                 Given a Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(ScenarioOutcome.Skipped, manifest.Scenarios[0].Outcome);
-        Assert.Empty(runtime.Store["Widget"]);
-        Assert.Empty(runtime.Calls); // no scenario begin/end either
+        manifest.Scenarios[0].Outcome.Should().Be(ScenarioOutcome.Skipped);
+        runtime.Store["Widget"].Should().BeEmpty();
+        runtime.Calls.Should().BeEmpty(); // no scenario begin/end either
     }
 
     [Fact]
@@ -309,11 +313,11 @@ public class TdmEngineTests
                 Given a Widget exists with name "W1"
               Scenario: Untagged
                 Given a Widget exists with name "W2"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(7, manifest.Scenarios[0].Seed);
-        Assert.Equal(3, manifest.Scenarios[1].Seed);
-        Assert.Contains("begin:Persistent:7", runtime.Calls);
+        manifest.Scenarios[0].Seed.Should().Be(7);
+        manifest.Scenarios[1].Seed.Should().Be(3);
+        runtime.Calls.Should().Contain("begin:Persistent:7");
     }
 
     [Fact]
@@ -329,9 +333,9 @@ public class TdmEngineTests
               @ephemeral
               Scenario: S
                 Given a Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Contains("begin:TrackedTeardown:1", runtime.Calls);
+        runtime.Calls.Should().Contain("begin:TrackedTeardown:1");
     }
 
     // ---------------------------------------------------------------- Multi-domain
@@ -345,10 +349,10 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        Assert.Contains(manifest.Scenarios[0].Warnings, w => w.Contains("ambiguous"));
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        manifest.Scenarios[0].Warnings.Should().Contain(w => w.Contains("ambiguous"));
     }
 
     [Fact]
@@ -362,11 +366,11 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Beta Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        Assert.Empty(alpha.Store["Widget"]);
-        Assert.Single(beta.Store["Widget"]);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        alpha.Store["Widget"].Should().BeEmpty();
+        beta.Store["Widget"].Should().ContainSingle();
     }
 
     [Fact]
@@ -381,10 +385,10 @@ public class TdmEngineTests
               @domain:Alpha
               Scenario: S
                 Given a Widget exists with name "W1"
-            """));
+            """), ct: Ct);
 
-        Assert.Single(alpha.Store["Widget"]);
-        Assert.Empty(beta.Store["Widget"]);
+        alpha.Store["Widget"].Should().ContainSingle();
+        beta.Store["Widget"].Should().BeEmpty();
     }
 
     [Fact]
@@ -397,10 +401,10 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Unicorn exists with name "U1"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        Assert.Contains(manifest.Scenarios[0].Warnings, w => w.Contains("Unicorn"));
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        manifest.Scenarios[0].Warnings.Should().Contain(w => w.Contains("Unicorn"));
     }
 
     // ---------------------------------------------------------------- Update / Delete / Load
@@ -419,12 +423,11 @@ public class TdmEngineTests
                 Then a Widget "W1" should exist with size "9"
                 When the Widget "W1" is deleted
                 Then 0 Widgets should exist
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        Assert.Empty(runtime.Store["Widget"]);
-        Assert.Contains("update:Widget", runtime.Calls);
-        Assert.Contains("delete:Widget", runtime.Calls);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        runtime.Store["Widget"].Should().BeEmpty();
+        runtime.Calls.Should().Contain("update:Widget").And.Contain("delete:Widget");
     }
 
     [Fact]
@@ -440,10 +443,11 @@ public class TdmEngineTests
                 And a Widget exists with name "W2" and colour "Blue"
                 When all Widgets with colour "Red" are deleted
                 Then 1 Widgets should exist
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
-        Assert.Equal("W2", Assert.IsType<Widget>(Assert.Single(runtime.Store["Widget"])).Name);
+        manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
+        runtime.Store["Widget"].Should().ContainSingle()
+            .Which.Should().BeOfType<Widget>().Which.Name.Should().Be("W2");
     }
 
     [Fact]
@@ -457,10 +461,10 @@ public class TdmEngineTests
               Scenario: S
                 Given a Widget exists with name "W1" and colour "Red"
                 Then a Widget "W1" should exist with colour "Blue"
-            """));
+            """), ct: Ct);
 
-        Assert.Equal(RunOutcome.CompletedWithWarnings, manifest.Run.Outcome);
-        Assert.Contains(manifest.Scenarios[0].Warnings, w => w.Contains("Colour"));
+        manifest.Run.Outcome.Should().Be(RunOutcome.CompletedWithWarnings);
+        manifest.Scenarios[0].Warnings.Should().Contain(w => w.Contains("Colour"));
     }
 
     // ---------------------------------------------------------------- Dry run
@@ -475,13 +479,13 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Widget exists with name "W1"
-            """), dryRun: true);
+            """), dryRun: true, ct: Ct);
 
-        Assert.True(manifest.Run.DryRun);
-        Assert.Empty(runtime.Store["Widget"]);
-        Assert.DoesNotContain(runtime.Calls, c => c.StartsWith("create"));
-        Assert.DoesNotContain(runtime.Calls, c => c.StartsWith("begin")); // no lifecycle churn either
-        Assert.Equal("dry-run", manifest.Scenarios[0].Entities[0].PersistedVia);
+        manifest.Run.DryRun.Should().BeTrue();
+        runtime.Store["Widget"].Should().BeEmpty();
+        runtime.Calls.Should().NotContain(c => c.StartsWith("create"));
+        runtime.Calls.Should().NotContain(c => c.StartsWith("begin")); // no lifecycle churn either
+        manifest.Scenarios[0].Entities[0].PersistedVia.Should().Be("dry-run");
     }
 
     // ---------------------------------------------------------------- Manifest serialization
@@ -495,12 +499,12 @@ public class TdmEngineTests
             Feature: F
               Scenario: S
                 Given a Widget exists with name "W1" and colour "Red"
-            """));
+            """), ct: Ct);
 
         var json = System.Text.Json.JsonSerializer.Serialize(manifest, TdmSettings.JsonOptions);
         var restored = System.Text.Json.JsonSerializer.Deserialize<RunManifest>(json, TdmSettings.JsonOptions)!;
-        Assert.Equal(manifest.Run.Outcome, restored.Run.Outcome);
-        Assert.Equal("W1", restored.Scenarios[0].Entities[0].NaturalKey);
-        Assert.Equal("Red", restored.Scenarios[0].Entities[0].Values["Colour"]);
+        restored.Run.Outcome.Should().Be(manifest.Run.Outcome);
+        restored.Scenarios[0].Entities[0].NaturalKey.Should().Be("W1");
+        restored.Scenarios[0].Entities[0].Values["Colour"].Should().Be("Red");
     }
 }

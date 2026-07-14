@@ -1,4 +1,5 @@
 using Acme.Orders.Data.Persistence.Domain;
+using AwesomeAssertions;
 using Tdm.Core.Settings;
 using Xunit;
 
@@ -12,10 +13,10 @@ public class DomainRuntimeBuilderTests
         await using var domains = new TestDomains();
         await using var runtime = domains.BuildOrders();
 
-        Assert.Equal(["Customer", "Order", "Product"],
-            runtime.Entities.Select(e => e.LogicalName).OrderBy(n => n, StringComparer.Ordinal));
-        Assert.True(runtime.TryResolveEntity("customers", out var customer, out _)); // plural + case tolerant
-        Assert.Equal(typeof(CustomerEntity), customer!.ClrType);
+        runtime.Entities.Select(e => e.LogicalName).OrderBy(n => n, StringComparer.Ordinal)
+            .Should().Equal("Customer", "Order", "Product");
+        runtime.TryResolveEntity("customers", out var customer, out _).Should().BeTrue(); // plural + case tolerant
+        customer!.ClrType.Should().Be(typeof(CustomerEntity));
     }
 
     [Fact]
@@ -24,9 +25,8 @@ public class DomainRuntimeBuilderTests
         await using var domains = new TestDomains();
         await using var runtime = domains.BuildBilling();
 
-        Assert.Contains("Account", runtime.Entities.Select(e => e.LogicalName));
-        Assert.Contains("Invoice", runtime.Entities.Select(e => e.LogicalName));
-        Assert.Contains("CustomerSummary", runtime.Entities.Select(e => e.LogicalName));
+        runtime.Entities.Select(e => e.LogicalName)
+            .Should().Contain(["Account", "Invoice", "CustomerSummary"]);
     }
 
     [Fact]
@@ -37,14 +37,14 @@ public class DomainRuntimeBuilderTests
         await using var billing = domains.BuildBilling();
 
         orders.TryResolveEntity("Customer", out var customer, out _);
-        Assert.True(customer!.HasClientSettableGuidKey);
-        Assert.Equal(IdStrategy.Deterministic, customer.IdStrategy);
-        Assert.False(customer.KeyIsDbGenerated);
+        customer!.HasClientSettableGuidKey.Should().BeTrue();
+        customer.IdStrategy.Should().Be(IdStrategy.Deterministic);
+        customer.KeyIsDbGenerated.Should().BeFalse();
 
         billing.TryResolveEntity("Invoice", out var invoice, out _);
-        Assert.True(invoice!.KeyIsDbGenerated);
-        Assert.Equal(IdStrategy.DbGenerated, invoice.IdStrategy);
-        Assert.Equal(typeof(int), invoice.KeyProperty!.PropertyType);
+        invoice!.KeyIsDbGenerated.Should().BeTrue();
+        invoice.IdStrategy.Should().Be(IdStrategy.DbGenerated);
+        invoice.KeyProperty!.PropertyType.Should().Be(typeof(int));
     }
 
     [Fact]
@@ -54,10 +54,10 @@ public class DomainRuntimeBuilderTests
         await using var runtime = domains.BuildOrders();
 
         runtime.TryResolveEntity("Customer", out var customer, out _);
-        Assert.Equal("Name", customer!.NaturalKeyProperty!.Name); // profile default
+        customer!.NaturalKeyProperty!.Name.Should().Be("Name"); // profile default
 
         runtime.TryResolveEntity("Product", out var product, out _);
-        Assert.Equal("Sku", product!.NaturalKeyProperty!.Name); // entities config override
+        product!.NaturalKeyProperty!.Name.Should().Be("Sku"); // entities config override
     }
 
     [Fact]
@@ -67,8 +67,8 @@ public class DomainRuntimeBuilderTests
         await using var runtime = domains.BuildOrders();
 
         runtime.TryResolveEntity("Order", out var order, out _);
-        Assert.Contains("Customer", order!.NavigationNames);
-        Assert.DoesNotContain(order.ScalarProperties(), p => p.Name == "Customer");
+        order!.NavigationNames.Should().Contain("Customer");
+        order.ScalarProperties().Should().NotContain(p => p.Name == "Customer");
     }
 
     [Fact]
@@ -79,19 +79,19 @@ public class DomainRuntimeBuilderTests
         var described = runtime.DescribeEntities().ToDictionary(i => i.LogicalName);
 
         // Well-known IRepository<T> shape.
-        Assert.Contains("ICustomerRepository", described["Customer"].Repository);
-        Assert.Equal("ICustomerRepository.Add", described["Customer"].PersistRoute);
-        Assert.Equal("CustomerFaker", described["Customer"].FakerSource);
+        described["Customer"].Repository.Should().Contain("ICustomerRepository");
+        described["Customer"].PersistRoute.Should().Be("ICustomerRepository.Add");
+        described["Customer"].FakerSource.Should().Be("CustomerFaker");
 
         // Duck-typed Add{Name} match.
-        Assert.Equal("IOrderRepository.AddOrder", described["Order"].PersistRoute);
-        Assert.Equal("auto", described["Order"].FakerSource);
+        described["Order"].PersistRoute.Should().Be("IOrderRepository.AddOrder");
+        described["Order"].FakerSource.Should().Be("auto");
 
         // No repository → DbContext fallback, warned.
-        Assert.Null(described["Product"].Repository);
-        Assert.StartsWith("DbContext", described["Product"].PersistRoute);
-        Assert.Contains(runtime.Warnings, w => w.Contains("IProductRepository"));
-        Assert.Contains(runtime.Warnings, w => w.Contains("OrderFaker"));
+        described["Product"].Repository.Should().BeNull();
+        described["Product"].PersistRoute.Should().StartWith("DbContext");
+        runtime.Warnings.Should().Contain(w => w.Contains("IProductRepository"));
+        runtime.Warnings.Should().Contain(w => w.Contains("OrderFaker"));
     }
 
     [Fact]
@@ -99,17 +99,18 @@ public class DomainRuntimeBuilderTests
     {
         await using var domains = new TestDomains();
         await using var runtime = domains.BuildBilling();
-        Assert.All(runtime.DescribeEntities(), i => Assert.Equal("DbContext", i.PersistRoute));
+        runtime.DescribeEntities().Should().AllSatisfy(i => i.PersistRoute.Should().Be("DbContext"));
     }
 
     [Fact]
     public async Task NoDbContextInAssemblies_Throws()
     {
         await using var domains = new TestDomains();
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            DomainRuntimeBuilder.Build(domains.Settings.Domains[0], domains.Settings,
-                [typeof(DomainRuntimeBuilderTests).Assembly]));
-        Assert.Contains("no public DbContext subclass", ex.Message);
+        FluentActions.Invoking(() =>
+                DomainRuntimeBuilder.Build(domains.Settings.Domains[0], domains.Settings,
+                    [typeof(DomainRuntimeBuilderTests).Assembly]))
+            .Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("no public DbContext subclass");
     }
 
     [Fact]
@@ -120,8 +121,9 @@ public class DomainRuntimeBuilderTests
         {
             Name = "X", Provider = "Oracle", ConnectionString = "whatever", ConventionProfile = "modern",
         };
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            DomainRuntimeBuilder.Build(domain, domains.Settings, [typeof(Acme.Orders.Data.Persistence.OrdersDbContext).Assembly]));
-        Assert.Contains("Oracle", ex.Message);
+        FluentActions.Invoking(() =>
+                DomainRuntimeBuilder.Build(domain, domains.Settings, [typeof(Acme.Orders.Data.Persistence.OrdersDbContext).Assembly]))
+            .Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("Oracle");
     }
 }

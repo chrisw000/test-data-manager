@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Tdm.Core.Settings;
 using Xunit;
 
@@ -20,11 +21,11 @@ public class TdmSettingsTests
         try
         {
             var settings = TdmSettings.Load(path);
-            Assert.Equal("t", settings.Run.Name);
-            Assert.Equal(FailurePolicy.FailRun, settings.Run.FailurePolicy);
-            Assert.Equal(9, settings.Run.DefaultSeed);
-            Assert.Equal(PersistenceMode.DbContextOnly, Assert.Single(settings.Domains).Persistence);
-            Assert.Equal("Sku", settings.EntityFor("Product").NaturalKey);
+            settings.Run.Name.Should().Be("t");
+            settings.Run.FailurePolicy.Should().Be(FailurePolicy.FailRun);
+            settings.Run.DefaultSeed.Should().Be(9);
+            settings.Domains.Should().ContainSingle().Which.Persistence.Should().Be(PersistenceMode.DbContextOnly);
+            settings.EntityFor("Product").NaturalKey.Should().Be("Sku");
         }
         finally { File.Delete(path); }
     }
@@ -35,8 +36,8 @@ public class TdmSettingsTests
         var settings = new TdmSettings();
         settings.ConventionProfiles["modern"] = new ConventionProfile { EntityClassPattern = "{Name}Custom" };
         settings.ApplyDefaults();
-        Assert.Equal("{Name}Custom", settings.ConventionProfiles["modern"].EntityClassPattern);
-        Assert.Equal("{Name}Model", settings.ConventionProfiles["legacy"].EntityClassPattern);
+        settings.ConventionProfiles["modern"].EntityClassPattern.Should().Be("{Name}Custom");
+        settings.ConventionProfiles["legacy"].EntityClassPattern.Should().Be("{Name}Model");
     }
 
     [Fact]
@@ -44,25 +45,20 @@ public class TdmSettingsTests
     {
         var settings = new TdmSettings();
         settings.ApplyDefaults();
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            settings.ProfileFor(new DomainSettings { Name = "X", ConventionProfile = "nope" }));
-        Assert.Contains("nope", ex.Message);
-        Assert.Contains("modern", ex.Message);
+        FluentActions.Invoking(() =>
+                settings.ProfileFor(new DomainSettings { Name = "X", ConventionProfile = "nope" }))
+            .Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("nope").And.Contain("modern");
     }
 
     [Fact]
-    public void EntityFor_Unconfigured_ReturnsDefault()
-    {
-        var settings = new TdmSettings();
-        Assert.Same(EntitySettings.Default, settings.EntityFor("Anything"));
-    }
+    public void EntityFor_Unconfigured_ReturnsDefault() =>
+        new TdmSettings().EntityFor("Anything").Should().BeSameAs(EntitySettings.Default);
 
     [Fact]
-    public void ResolveConnectionString_InlineWins()
-    {
-        var domain = new DomainSettings { Name = "D", ConnectionString = "inline", ConnectionStringName = "IGNORED" };
-        Assert.Equal("inline", domain.ResolveConnectionString());
-    }
+    public void ResolveConnectionString_InlineWins() =>
+        new DomainSettings { Name = "D", ConnectionString = "inline", ConnectionStringName = "IGNORED" }
+            .ResolveConnectionString().Should().Be("inline");
 
     [Fact]
     public void ResolveConnectionString_FromEnvironment()
@@ -70,25 +66,24 @@ public class TdmSettingsTests
         Environment.SetEnvironmentVariable("TDM_CONNECTIONSTRINGS__TESTDB", "Data Source=env.db");
         try
         {
-            var domain = new DomainSettings { Name = "D", ConnectionStringName = "TestDb" };
-            Assert.Equal("Data Source=env.db", domain.ResolveConnectionString());
+            new DomainSettings { Name = "D", ConnectionStringName = "TestDb" }
+                .ResolveConnectionString().Should().Be("Data Source=env.db");
         }
         finally { Environment.SetEnvironmentVariable("TDM_CONNECTIONSTRINGS__TESTDB", null); }
     }
 
     [Fact]
-    public void ResolveConnectionString_MissingEverywhere_Throws()
-    {
-        var domain = new DomainSettings { Name = "D", ConnectionStringName = "NoSuchName" };
-        var ex = Assert.Throws<InvalidOperationException>(() => domain.ResolveConnectionString());
-        Assert.Contains("NoSuchName", ex.Message);
-    }
+    public void ResolveConnectionString_MissingEverywhere_Throws() =>
+        FluentActions.Invoking(() =>
+                new DomainSettings { Name = "D", ConnectionStringName = "NoSuchName" }.ResolveConnectionString())
+            .Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("NoSuchName");
 
     [Fact]
     public void FindDomain_CaseInsensitive()
     {
         var settings = new TdmSettings { Domains = [new DomainSettings { Name = "Orders" }] };
-        Assert.NotNull(settings.FindDomain("orders"));
-        Assert.Null(settings.FindDomain("Billing"));
+        settings.FindDomain("orders").Should().NotBeNull();
+        settings.FindDomain("Billing").Should().BeNull();
     }
 }

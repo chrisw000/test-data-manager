@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Tdm.Core.Benchmarks;
 using Xunit;
 
@@ -9,30 +10,30 @@ public class BenchmarkAggregatorTests
     public void Compute_NearestRankPercentiles_OneToHundred()
     {
         var stats = BenchmarkAggregator.Compute([.. Enumerable.Range(1, 100).Select(i => (double)i)]);
-        Assert.Equal(100, stats.Count);
-        Assert.Equal(50, stats.P50Ms);
-        Assert.Equal(95, stats.P95Ms);
-        Assert.Equal(100, stats.MaxMs);
-        Assert.Equal(50.5, stats.MeanMs);
-        Assert.Equal(5050, stats.TotalMs);
+        stats.Count.Should().Be(100);
+        stats.P50Ms.Should().Be(50);
+        stats.P95Ms.Should().Be(95);
+        stats.MaxMs.Should().Be(100);
+        stats.MeanMs.Should().Be(50.5);
+        stats.TotalMs.Should().Be(5050);
     }
 
     [Fact]
     public void Compute_SingleSample()
     {
         var stats = BenchmarkAggregator.Compute([7.5]);
-        Assert.Equal(1, stats.Count);
-        Assert.Equal(7.5, stats.P50Ms);
-        Assert.Equal(7.5, stats.P95Ms);
-        Assert.Equal(7.5, stats.MaxMs);
+        stats.Count.Should().Be(1);
+        stats.P50Ms.Should().Be(7.5);
+        stats.P95Ms.Should().Be(7.5);
+        stats.MaxMs.Should().Be(7.5);
     }
 
     [Fact]
     public void Compute_Empty_AllZero()
     {
         var stats = BenchmarkAggregator.Compute([]);
-        Assert.Equal(0, stats.Count);
-        Assert.Equal(0, stats.TotalMs);
+        stats.Count.Should().Be(0);
+        stats.TotalMs.Should().Be(0);
     }
 
     [Fact]
@@ -44,12 +45,10 @@ public class BenchmarkAggregatorTests
         aggregator.Record("load", "Customer", 5);
 
         var byOperation = aggregator.ByOperation();
-        Assert.Equal(2, byOperation["create"].Count);
-        Assert.Equal(1, byOperation["load"].Count);
+        byOperation["create"].Count.Should().Be(2);
+        byOperation["load"].Count.Should().Be(1);
 
-        var byBoth = aggregator.ByOperationAndEntity();
-        Assert.Contains("create:Customer", byBoth.Keys);
-        Assert.Contains("create:Order", byBoth.Keys);
+        aggregator.ByOperationAndEntity().Keys.Should().Contain(["create:Customer", "create:Order"]);
     }
 
     [Fact]
@@ -60,6 +59,6 @@ public class BenchmarkAggregatorTests
         var target = new BenchmarkAggregator();
         target.Record("create", "Customer", 20);
         source.MergeInto(target);
-        Assert.Equal(2, target.ByOperation()["create"].Count);
+        target.ByOperation()["create"].Count.Should().Be(2);
     }
 }

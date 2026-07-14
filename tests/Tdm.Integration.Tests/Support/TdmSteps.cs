@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Reqnroll;
 using Tdm.Core.Manifest;
@@ -12,6 +13,8 @@ namespace Tdm.Integration.Tests.Support;
 [Binding]
 public sealed class TdmSteps(TdmHarness harness)
 {
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
     private Guid _lastExternalId;
     private string? _firstRunEmail;
     private string? _secondRunEmail;
@@ -41,7 +44,7 @@ public sealed class TdmSteps(TdmHarness harness)
             using var environment = new TdmHarness();
             environment.Settings.Run.DefaultSeed = seed;
             var manifest = await environment.RunAsync(text);
-            Assert.Equal(RunOutcome.Succeeded, manifest.Run.Outcome);
+            manifest.Run.Outcome.Should().Be(RunOutcome.Succeeded);
             return manifest.Scenarios[0].Entities[0].Values["Email"];
         }
     }
@@ -55,7 +58,7 @@ public sealed class TdmSteps(TdmHarness harness)
         domain.PluginPath = Path.GetDirectoryName(typeof(Acme.Orders.Data.Persistence.OrdersDbContext).Assembly.Location)!;
 
         var loader = new PluginLoader(new FolderPluginAcquirer());
-        var plugin = await loader.LoadAsync(domain);
+        var plugin = await loader.LoadAsync(domain, Ct);
         try
         {
             var runtime = DomainRuntimeBuilder.Build(domain, harness.Settings, plugin.Assemblies);
@@ -78,20 +81,19 @@ public sealed class TdmSteps(TdmHarness harness)
         var manifest = harness.RequireManifest();
         var warnings = string.Join(" | ", manifest.Scenarios
             .SelectMany(s => s.Warnings.Concat(s.Entities.SelectMany(e => e.Warnings))));
-        Assert.True(expected == manifest.Run.Outcome,
-            $"Expected {expected} but was {manifest.Run.Outcome}. Warnings: {warnings}");
+        manifest.Run.Outcome.Should().Be(expected, "warnings: {0}", warnings);
     }
 
     [Then(@"the exit code is (\d+)")]
-    public void ThenExitCode(int expected) => Assert.Equal(expected, harness.RequireManifest().ExitCode);
+    public void ThenExitCode(int expected) => harness.RequireManifest().ExitCode.Should().Be(expected);
 
     [Then(@"the manifest run executed (\d+) scenarios?")]
-    public void ThenScenarioCount(int expected) => Assert.Equal(expected, harness.RequireManifest().Scenarios.Count);
+    public void ThenScenarioCount(int expected) => harness.RequireManifest().Scenarios.Should().HaveCount(expected);
 
     [Then(@"the manifest records a reference resolved from ""(.*)""")]
     public void ThenReferenceResolvedFrom(string source) =>
-        Assert.Contains(harness.RequireManifest().Scenarios.SelectMany(s => s.References),
-            r => r.ResolvedFrom == source);
+        harness.RequireManifest().Scenarios.SelectMany(s => s.References)
+            .Should().Contain(r => r.ResolvedFrom == source);
 
     [Then(@"a manifest warning contains ""(.*)""")]
     public void ThenWarningContains(string fragment)
@@ -99,37 +101,37 @@ public sealed class TdmSteps(TdmHarness harness)
         var manifest = harness.RequireManifest();
         var allWarnings = manifest.Scenarios.SelectMany(s => s.Warnings)
             .Concat(manifest.Scenarios.SelectMany(s => s.Entities).SelectMany(e => e.Warnings));
-        Assert.Contains(allWarnings, w => w.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+        allWarnings.Should().Contain(w => w.Contains(fragment, StringComparison.OrdinalIgnoreCase));
     }
 
     [Then(@"the manifest entity ""(.*)"" was persisted via ""(.*)""")]
     public void ThenPersistedVia(string entity, string routeFragment) =>
-        Assert.Contains(harness.RequireManifest().Scenarios.SelectMany(s => s.Entities),
-            e => e.Entity == entity && e.PersistedVia?.Contains(routeFragment) == true);
+        harness.RequireManifest().Scenarios.SelectMany(s => s.Entities)
+            .Should().Contain(e => e.Entity == entity && e.PersistedVia != null && e.PersistedVia.Contains(routeFragment));
 
     [Then(@"the manifest benchmark includes ""(.*)""")]
     public void ThenBenchmarkIncludes(string operation) =>
-        Assert.Contains(operation, harness.RequireManifest().Run.Benchmark.Keys);
+        harness.RequireManifest().Run.Benchmark.Keys.Should().Contain(operation);
 
     [Then(@"the manifest has (\d+) unmatched steps?")]
     public void ThenUnmatchedSteps(int expected) =>
-        Assert.Equal(expected, harness.RequireManifest().Scenarios.Sum(s => s.UnmatchedSteps.Count));
+        harness.RequireManifest().Scenarios.Sum(s => s.UnmatchedSteps.Count).Should().Be(expected);
 
     [Then(@"the manifest scenario teardown deleted (\d+) rows")]
     public void ThenTeardownDeleted(int expected)
     {
-        var scenario = Assert.Single(harness.RequireManifest().Scenarios);
-        Assert.NotNull(scenario.Teardown);
-        Assert.Equal(expected, scenario.Teardown!.Deleted);
-        Assert.Empty(scenario.Teardown.Orphaned);
+        var scenario = harness.RequireManifest().Scenarios.Should().ContainSingle().Subject;
+        scenario.Teardown.Should().NotBeNull();
+        scenario.Teardown!.Deleted.Should().Be(expected);
+        scenario.Teardown.Orphaned.Should().BeEmpty();
     }
 
     [Then(@"the manifest invoice id is a database-generated integer")]
     public void ThenInvoiceIdIsDbGenerated()
     {
         var entry = harness.RequireManifest().Scenarios.SelectMany(s => s.Entities).First(e => e.Entity == "Invoice");
-        Assert.Equal("DbGenerated", entry.IdStrategy);
-        Assert.True(int.Parse(entry.Id!) > 0);
+        entry.IdStrategy.Should().Be("DbGenerated");
+        int.Parse(entry.Id!).Should().BePositive();
     }
 
     // ---------------------------------------------------------------- Database assertions
@@ -138,46 +140,46 @@ public sealed class TdmSteps(TdmHarness harness)
     public async Task ThenCustomerCount(int expected)
     {
         await using var db = harness.NewOrdersContext();
-        Assert.Equal(expected, await db.Customers.CountAsync());
+        (await db.Customers.CountAsync(Ct)).Should().Be(expected);
     }
 
     [Then(@"the Orders database has (\d+) product rows")]
     public async Task ThenProductCount(int expected)
     {
         await using var db = harness.NewOrdersContext();
-        Assert.Equal(expected, await db.Products.CountAsync());
+        (await db.Products.CountAsync(Ct)).Should().Be(expected);
     }
 
     [Then(@"the Orders database has (\d+) order rows")]
     public async Task ThenOrderCount(int expected)
     {
         await using var db = harness.NewOrdersContext();
-        Assert.Equal(expected, await db.Orders.CountAsync());
+        (await db.Orders.CountAsync(Ct)).Should().Be(expected);
     }
 
     [Then(@"customer ""(.*)"" has tier ""(.*)""")]
     public async Task ThenCustomerTier(string name, string tier)
     {
         await using var db = harness.NewOrdersContext();
-        var customer = await db.Customers.SingleAsync(c => c.Name == name);
-        Assert.Equal(tier, customer.Tier);
+        var customer = await db.Customers.SingleAsync(c => c.Name == name, Ct);
+        customer.Tier.Should().Be(tier);
     }
 
     [Then(@"order ""(.*)"" is linked to customer ""(.*)""")]
     public async Task ThenOrderLinked(string orderNumber, string customerName)
     {
         await using var db = harness.NewOrdersContext();
-        var order = await db.Orders.SingleAsync(o => o.OrderNumber == orderNumber);
-        var customer = await db.Customers.SingleAsync(c => c.Name == customerName);
-        Assert.Equal(customer.Id, order.CustomerId);
+        var order = await db.Orders.SingleAsync(o => o.OrderNumber == orderNumber, Ct);
+        var customer = await db.Customers.SingleAsync(c => c.Name == customerName, Ct);
+        order.CustomerId.Should().Be(customer.Id);
     }
 
     [Then(@"customer ""(.*)"" has the identity-contract id for domain ""(.*)""")]
     public async Task ThenCustomerIdentity(string name, string domain)
     {
         await using var db = harness.NewOrdersContext();
-        var customer = await db.Customers.SingleAsync(c => c.Name == name);
-        Assert.Equal(TdmIdentity.ForNaturalKey(domain, "Customer", name), customer.Id);
+        var customer = await db.Customers.SingleAsync(c => c.Name == name, Ct);
+        customer.Id.Should().Be(TdmIdentity.ForNaturalKey(domain, "Customer", name));
     }
 
     [Then(@"invoice ""(.*)"" carries the external customer id for ""(.*)"" from domain ""(.*)""")]
@@ -185,16 +187,16 @@ public sealed class TdmSteps(TdmHarness harness)
     {
         _lastExternalId = TdmIdentity.ForNaturalKey(domain, "Customer", customerKey);
         await using var db = harness.NewBillingContext();
-        var invoice = await db.Invoices.SingleAsync(i => i.InvoiceNumber == invoiceNumber);
-        Assert.Equal(_lastExternalId, invoice.CustomerId);
+        var invoice = await db.Invoices.SingleAsync(i => i.InvoiceNumber == invoiceNumber, Ct);
+        invoice.CustomerId.Should().Be(_lastExternalId);
     }
 
     [Then(@"a customer summary projection ""(.*)"" exists with that id")]
     public async Task ThenProjectionExists(string name)
     {
         await using var db = harness.NewBillingContext();
-        var summary = await db.CustomerSummaries.SingleAsync(s => s.Name == name);
-        Assert.Equal(_lastExternalId, summary.Id);
+        var summary = await db.CustomerSummaries.SingleAsync(s => s.Name == name, Ct);
+        summary.Id.Should().Be(_lastExternalId);
     }
 
     // ---------------------------------------------------------------- Determinism
@@ -202,14 +204,14 @@ public sealed class TdmSteps(TdmHarness harness)
     [Then(@"the generated customer emails match")]
     public void ThenEmailsMatch()
     {
-        Assert.NotNull(_firstRunEmail);
-        Assert.Equal(_firstRunEmail, _secondRunEmail);
+        _firstRunEmail.Should().NotBeNull();
+        _secondRunEmail.Should().Be(_firstRunEmail);
     }
 
     [Then(@"the generated customer emails differ")]
     public void ThenEmailsDiffer()
     {
-        Assert.NotNull(_firstRunEmail);
-        Assert.NotEqual(_firstRunEmail, _secondRunEmail);
+        _firstRunEmail.Should().NotBeNull();
+        _secondRunEmail.Should().NotBe(_firstRunEmail);
     }
 }

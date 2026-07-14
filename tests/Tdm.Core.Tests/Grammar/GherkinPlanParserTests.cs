@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Tdm.Core.Grammar;
 using Tdm.Core.Settings;
 using Xunit;
@@ -20,10 +21,10 @@ public class GherkinPlanParserTests
               Scenario: Two
                 Given an Order exists
             """);
-        Assert.Equal(2, plan.Scenarios.Count);
-        Assert.All(plan.Scenarios, s =>
-            Assert.Equal("Customer", Assert.IsType<CreateStep>(s.Steps[0]).Entity));
-        Assert.Equal(2, plan.Scenarios[0].Steps.Count);
+        plan.Scenarios.Should().HaveCount(2);
+        plan.Scenarios.Should().AllSatisfy(s =>
+            s.Steps[0].Should().BeOfType<CreateStep>().Which.Entity.Should().Be("Customer"));
+        plan.Scenarios[0].Steps.Should().HaveCount(2);
     }
 
     [Fact]
@@ -40,9 +41,9 @@ public class GherkinPlanParserTests
                 Scenario: InRule
                   Given an Order exists
             """);
-        var scenario = Assert.Single(plan.Scenarios);
-        Assert.Contains("@ruleTag", scenario.Tags);
-        Assert.Equal(3, scenario.Steps.Count); // feature bg + rule bg + own step
+        var scenario = plan.Scenarios.Should().ContainSingle().Subject;
+        scenario.Tags.Should().Contain("@ruleTag");
+        scenario.Steps.Should().HaveCount(3); // feature bg + rule bg + own step
     }
 
     [Fact]
@@ -57,10 +58,10 @@ public class GherkinPlanParserTests
                 | Acme  | Gold |
                 | Beta  | Silver |
             """);
-        Assert.Equal(2, plan.Scenarios.Count);
-        Assert.Equal("Customer Acme", plan.Scenarios[0].Name);
-        var step = Assert.IsType<CreateStep>(plan.Scenarios[1].Steps[0]);
-        Assert.Equal(["Beta", "Silver"], step.Overrides.Select(o => o.RawValue));
+        plan.Scenarios.Should().HaveCount(2);
+        plan.Scenarios[0].Name.Should().Be("Customer Acme");
+        var step = plan.Scenarios[1].Steps[0].Should().BeOfType<CreateStep>().Subject;
+        step.Overrides.Select(o => o.RawValue).Should().Equal("Beta", "Silver");
     }
 
     [Fact]
@@ -76,8 +77,9 @@ public class GherkinPlanParserTests
                 | sku  |
                 | S-1  |
             """);
-        var step = Assert.IsType<CreateStep>(Assert.Single(plan.Scenarios).Steps[0]);
-        Assert.Equal("S-1", step.Rows![0][0].RawValue);
+        var scenario = plan.Scenarios.Should().ContainSingle().Subject;
+        var step = scenario.Steps[0].Should().BeOfType<CreateStep>().Subject;
+        step.Rows![0][0].RawValue.Should().Be("S-1");
     }
 
     [Fact]
@@ -90,10 +92,10 @@ public class GherkinPlanParserTests
               Scenario: S
                 Given a Customer exists
             """);
-        var scenario = Assert.Single(plan.Scenarios);
-        Assert.Equal(42, scenario.Seed);
-        Assert.Equal("Billing", scenario.DomainPin);
-        Assert.True(scenario.ForceBenchmark);
+        var scenario = plan.Scenarios.Should().ContainSingle().Subject;
+        scenario.Seed.Should().Be(42);
+        scenario.DomainPin.Should().Be("Billing");
+        scenario.ForceBenchmark.Should().BeTrue();
     }
 
     [Fact]
@@ -108,23 +110,20 @@ public class GherkinPlanParserTests
               Scenario: B
                 Given a Customer exists
             """);
-        Assert.True(plan.Scenarios[0].Skip);
-        Assert.Equal(LifecycleMode.Persistent, plan.Scenarios[0].LifecycleOverride);
-        Assert.Equal(LifecycleMode.TrackedTeardown, plan.Scenarios[1].LifecycleOverride);
-        Assert.Null(Parse("Feature: F\n  Scenario: S\n    Given a Customer exists").Scenarios[0].LifecycleOverride);
+        plan.Scenarios[0].Skip.Should().BeTrue();
+        plan.Scenarios[0].LifecycleOverride.Should().Be(LifecycleMode.Persistent);
+        plan.Scenarios[1].LifecycleOverride.Should().Be(LifecycleMode.TrackedTeardown);
+        Parse("Feature: F\n  Scenario: S\n    Given a Customer exists")
+            .Scenarios[0].LifecycleOverride.Should().BeNull();
     }
 
     [Fact]
-    public void NoSeedTag_SeedIsNull()
-    {
-        var plan = Parse("Feature: F\n  Scenario: S\n    Given a Customer exists");
-        Assert.Null(plan.Scenarios[0].Seed);
-    }
+    public void NoSeedTag_SeedIsNull() =>
+        Parse("Feature: F\n  Scenario: S\n    Given a Customer exists")
+            .Scenarios[0].Seed.Should().BeNull();
 
     [Fact]
-    public void StepLineNumbers_Recorded()
-    {
-        var plan = Parse("Feature: F\n  Scenario: S\n    Given a Customer exists");
-        Assert.Equal(3, plan.Scenarios[0].Steps[0].Line);
-    }
+    public void StepLineNumbers_Recorded() =>
+        Parse("Feature: F\n  Scenario: S\n    Given a Customer exists")
+            .Scenarios[0].Steps[0].Line.Should().Be(3);
 }

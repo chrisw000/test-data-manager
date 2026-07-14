@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Tdm.Core.Naming;
 using Xunit;
 
@@ -16,7 +17,7 @@ public class NameMatcherTests
     [InlineData("Customer", "customer")]
     [InlineData("  Spaces  ", "spaces")]
     public void Normalize_StripsAndLowers(string input, string expected) =>
-        Assert.Equal(expected, NameMatcher.Normalize(input));
+        NameMatcher.Normalize(input).Should().Be(expected);
 
     // ── Singularize ───────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ public class NameMatcherTests
     [InlineData("Orders", "Order")]
     [InlineData("Customer", "Customer")]   // already singular — unchanged
     public void Singularize_PluralsAndSingulars(string input, string expected) =>
-        Assert.Equal(expected, NameMatcher.Singularize(input));
+        NameMatcher.Singularize(input).Should().Be(expected);
 
     // ── StripPattern ──────────────────────────────────────────────────────────
 
@@ -39,11 +40,11 @@ public class NameMatcherTests
     [InlineData("Customer", "{Name}", "Customer")]
     [InlineData("SomeClass", "{Name}Entity", "SomeClass")]   // pattern doesn't match — return as-is
     public void StripPattern_VariousPatterns(string clrTypeName, string pattern, string expected) =>
-        Assert.Equal(expected, NameMatcher.StripPattern(clrTypeName, pattern));
+        NameMatcher.StripPattern(clrTypeName, pattern).Should().Be(expected);
 
     [Fact]
     public void StripPattern_NoPlaceholder_ReturnsInputUnchanged() =>
-        Assert.Equal("CustomerEntity", NameMatcher.StripPattern("CustomerEntity", "NoPlaceholderHere"));
+        NameMatcher.StripPattern("CustomerEntity", "NoPlaceholderHere").Should().Be("CustomerEntity");
 
     // ── Matches ───────────────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ public class NameMatcherTests
     [InlineData("Order Line", "orderline", true)]  // space stripped
     [InlineData("Invoice", "Customer", false)]
     public void Matches_PluralCaseSpaceTolerant(string gherkin, string logical, bool expected) =>
-        Assert.Equal(expected, NameMatcher.Matches(gherkin, logical));
+        NameMatcher.Matches(gherkin, logical).Should().Be(expected);
 
     // ── Expand ────────────────────────────────────────────────────────────────
 
@@ -67,5 +68,5 @@ public class NameMatcherTests
     [InlineData("{Name}Entity", "Order", "OrderEntity")]
     [InlineData("{Name}", "Widget", "Widget")]
     public void Expand_ReplacesPlaceholder(string pattern, string logicalName, string expected) =>
-        Assert.Equal(expected, NameMatcher.Expand(pattern, logicalName));
+        NameMatcher.Expand(pattern, logicalName).Should().Be(expected);
 }
