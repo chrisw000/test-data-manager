@@ -50,7 +50,11 @@ public sealed class RunInfo
 public sealed class ScenarioManifest
 {
     public string Feature { get; set; } = "";
+    /// <summary>Source feature file path ("&lt;inline&gt;" for text-parsed features) — SARIF location anchor (W1-D3).</summary>
+    public string FeatureFile { get; set; } = "";
     public string Scenario { get; set; } = "";
+    /// <summary>Line of the Scenario keyword in <see cref="FeatureFile"/>.</summary>
+    public int Line { get; set; }
     public int Seed { get; set; }
     public List<string> Tags { get; set; } = [];
     public LifecycleMode Lifecycle { get; set; }

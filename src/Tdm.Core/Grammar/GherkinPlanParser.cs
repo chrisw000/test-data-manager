@@ -99,10 +99,11 @@ public sealed class GherkinPlanParser
         var scenarioTags = inheritedTags.Concat(scenario.Tags.Select(t => t.Name)).ToList();
         var allSteps = backgroundSteps.Concat(scenario.Steps).ToList();
 
+        var line = scenario.Location.Line;
         var examples = scenario.Examples?.ToList() ?? [];
         if (examples.Count == 0)
         {
-            yield return BuildScenario(featureName, scenario.Name, scenarioTags, allSteps, substitutions: null);
+            yield return BuildScenario(featureName, scenario.Name, line, scenarioTags, allSteps, substitutions: null);
             yield break;
         }
 
@@ -123,16 +124,16 @@ public sealed class GherkinPlanParser
 
                 var name = Substitute(scenario.Name, substitutions);
                 if (name == scenario.Name) name = $"{scenario.Name} #{rowIndex}";
-                yield return BuildScenario(featureName, name, tags, allSteps, substitutions);
+                yield return BuildScenario(featureName, name, line, tags, allSteps, substitutions);
             }
         }
     }
 
     private static ScenarioPlan BuildScenario(
-        string featureName, string name, List<string> tags, List<Step> steps,
+        string featureName, string name, int line, List<string> tags, List<Step> steps,
         Dictionary<string, string>? substitutions)
     {
-        var plan = new ScenarioPlan { FeatureName = featureName, Name = name, Tags = tags };
+        var plan = new ScenarioPlan { FeatureName = featureName, Name = name, Line = line, Tags = tags };
         foreach (var step in steps)
         {
             var text = Substitute(step.Text, substitutions);

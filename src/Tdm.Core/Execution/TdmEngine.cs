@@ -81,7 +81,9 @@ public sealed class TdmEngine(
                 var scenarioManifest = new ScenarioManifest
                 {
                     Feature = feature.Name,
+                    FeatureFile = feature.SourcePath,
                     Scenario = scenario.Name,
+                    Line = scenario.Line,
                     Tags = scenario.Tags,
                 };
                 manifest.Scenarios.Add(scenarioManifest);

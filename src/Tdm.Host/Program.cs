@@ -24,33 +24,44 @@ var updatePluginsOption = new Option<bool>("--update-plugins")
 {
     Description = "Re-resolve plugin package versions, ignoring tdm.plugins.lock.json",
 };
+var reportOption = new Option<string[]>("--report")
+{
+    Description = "Additionally emit the manifest as <format>=<path>; formats: sarif, junit. Repeatable.",
+    Arity = ArgumentArity.ZeroOrMore,
+};
 
 var root = new RootCommand("TDM — Gherkin-driven Test Data Manager");
 
 var runCommand = new Command("run", "Parse feature files, seed data, write the run manifest.")
 {
-    settingsOption, seedOption, policyOption, lifecycleOption, benchmarkOption, updatePluginsOption,
+    settingsOption, seedOption, policyOption, lifecycleOption, benchmarkOption, updatePluginsOption, reportOption,
 };
 runCommand.SetAction(async (parseResult, ct) =>
 {
+    var reports = ParseReports(parseResult.GetValue(reportOption));
     var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!,
         parseResult.GetValue(seedOption), parseResult.GetValue(policyOption),
         parseResult.GetValue(lifecycleOption), parseResult.GetValue(benchmarkOption),
         parseResult.GetValue(updatePluginsOption));
-    return await composer.RunAsync(dryRun: false, ct);
+    return await composer.RunAsync(dryRun: false, reports, ct);
 });
 
 var validateCommand = new Command("validate", "Parse features and resolve entities/fakers/repositories; persist nothing (CI dry run).")
 {
-    settingsOption, policyOption, updatePluginsOption,
+    settingsOption, policyOption, updatePluginsOption, reportOption,
 };
 validateCommand.SetAction(async (parseResult, ct) =>
 {
+    var reports = ParseReports(parseResult.GetValue(reportOption));
     var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!,
         seed: null, parseResult.GetValue(policyOption), lifecycle: null, benchmark: null,
         parseResult.GetValue(updatePluginsOption));
-    return await composer.RunAsync(dryRun: true, ct);
+    return await composer.RunAsync(dryRun: true, reports, ct);
 });
+
+// Fail fast on malformed --report specs, before any plugin/database work.
+static IReadOnlyList<(string Format, string Path)> ParseReports(string[]? specs) =>
+    (specs ?? []).Select(Tdm.Observability.Reports.ReportEmitter.ParseSpec).ToList();
 
 var teardownCommand = new Command("teardown", "Delete rows recorded in a manifest, in reverse dependency order.")
 {
@@ -117,7 +128,10 @@ namespace Tdm.Host
             return new HostComposer(settings, Path.GetDirectoryName(fullPath)!, updatePlugins);
         }
 
-        public async Task<int> RunAsync(bool dryRun, CancellationToken ct)
+        public async Task<int> RunAsync(bool dryRun, CancellationToken ct) =>
+            await RunAsync(dryRun, [], ct);
+
+        public async Task<int> RunAsync(bool dryRun, IReadOnlyList<(string Format, string Path)> reports, CancellationToken ct)
         {
             using var otel = OtelBootstrap.Start(_settings.Run.Name);
             var (runtimes, plugins) = await BuildRuntimesAsync(ct);
@@ -151,6 +165,12 @@ namespace Tdm.Host
                 var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
                 var manifestFile = ManifestWriter.Write(manifest, outputPath);
                 _log.LogInformation("Manifest written: {Path}", manifestFile);
+
+                foreach (var (format, path) in reports)
+                {
+                    var written = Tdm.Observability.Reports.ReportEmitter.Write(manifest, format, path, _baseDirectory);
+                    _log.LogInformation("{Format} report written: {Path}", format, written);
+                }
 
                 RunSummary.Log(_log, manifest);
                 return manifest.ExitCode;

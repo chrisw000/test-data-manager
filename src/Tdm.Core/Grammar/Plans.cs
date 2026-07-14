@@ -73,6 +73,9 @@ public sealed class ScenarioPlan
 {
     public required string FeatureName { get; init; }
     public required string Name { get; init; }
+    /// <summary>Line of the Scenario keyword in the source feature file (outline expansions
+    /// keep the original outline's line) — anchors SARIF report locations (W1-D3).</summary>
+    public int Line { get; init; }
     public List<string> Tags { get; init; } = [];
     public List<StepPlan> Steps { get; init; } = [];
 

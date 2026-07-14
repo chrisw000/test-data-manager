@@ -1,0 +1,81 @@
+name: 'TDM'
+description: >-
+  Run the Test Data Manager (W1-D3): validate | run | teardown, with exit-code mapping
+  (0 success, 1 success-with-issues, 2+ failure), manifest artifact upload, and optional
+  SARIF/JUnit report emission for PR annotations and CI test UIs.
+inputs:
+  command:
+    description: 'validate | run | teardown'
+    default: 'validate'
+  settings:
+    description: 'Path to tdm.settings.json'
+    default: 'tdm.settings.json'
+  policy:
+    description: 'Override run.failurePolicy (BestEffort | FailObject | FailRun)'
+    default: ''
+  lifecycle:
+    description: 'Override run.lifecycle (Persistent | Transactional | TrackedTeardown)'
+    default: ''
+  seed:
+    description: 'Override run.defaultSeed'
+    default: ''
+  manifest:
+    description: 'Manifest path (teardown command only)'
+    default: ''
+  report-sarif:
+    description: 'Emit a SARIF report to this path (use with the SARIF upload action for PR annotations)'
+    default: ''
+  report-junit:
+    description: 'Emit a JUnit XML report to this path'
+    default: ''
+  manifest-artifact:
+    description: 'Build-artifact name for the run manifest(s); empty disables upload'
+    default: 'tdm-manifest'
+  manifest-path:
+    description: 'Glob of manifests to upload'
+    default: 'output/*.tdm.json'
+  tool:
+    description: >-
+      How to invoke the TDM host. Default assumes `dotnet tool install Tdm.Tool`;
+      use `dotnet run --project src/Tdm.Host --no-build --` to run from source.
+    default: 'tdm'
+outputs:
+  exit-code:
+    description: 'Raw TDM exit code: 0 success, 1 completed-with-warnings, 2 failed'
+    value: ${{ steps.tdm.outputs.exit-code }}
+runs:
+  using: 'composite'
+  steps:
+    - id: tdm
+      shell: bash
+      run: |
+        ARGS=("${{ inputs.command }}")
+        if [ "${{ inputs.command }}" = "teardown" ]; then
+          ARGS+=(--settings "${{ inputs.settings }}" --manifest "${{ inputs.manifest }}")
+        else
+          ARGS+=(--settings "${{ inputs.settings }}")
+          [ -n "${{ inputs.policy }}" ]    && ARGS+=(--policy "${{ inputs.policy }}")
+          [ -n "${{ inputs.lifecycle }}" ] && ARGS+=(--lifecycle "${{ inputs.lifecycle }}")
+          [ -n "${{ inputs.seed }}" ]      && ARGS+=(--seed "${{ inputs.seed }}")
+          [ -n "${{ inputs['report-sarif'] }}" ] && ARGS+=(--report "sarif=${{ inputs['report-sarif'] }}")
+          [ -n "${{ inputs['report-junit'] }}" ] && ARGS+=(--report "junit=${{ inputs['report-junit'] }}")
+        fi
+
+        set +e
+        ${{ inputs.tool }} "${ARGS[@]}"
+        CODE=$?
+        set -e
+        echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
+        case $CODE in
+          0) echo "TDM ${{ inputs.command }} succeeded." ;;
+          1) echo "::warning::TDM ${{ inputs.command }} completed with issues (exit 1) — see the manifest artifact." ;;
+          *) echo "::error::TDM ${{ inputs.command }} failed (exit $CODE)."
+             exit $CODE ;;
+        esac
+
+    - if: ${{ always() && inputs['manifest-artifact'] != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs['manifest-artifact'] }}
+        path: ${{ inputs['manifest-path'] }}
+        if-no-files-found: ignore

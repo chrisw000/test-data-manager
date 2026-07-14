@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  # For SARIF upload → inline PR annotations of TDM findings.
+  security-events: write
+
 jobs:
   build-test-validate:
     runs-on: ubuntu-latest
@@ -25,16 +30,31 @@ jobs:
       - name: Test
         run: dotnet test --no-build
 
-      # The write-repository policy gate (ADR-0001) and full feature validation run
-      # against the demo settings: a PR that adds an entity without a write repository,
-      # or a feature step that no longer parses, fails here — before any data exists.
+      # Dogfoods the composite action (W1-P3). The write-repository policy gate (ADR-0001)
+      # and full feature validation run against the demo settings: a PR that adds an entity
+      # without a write repository, or a feature step that no longer parses, fails here —
+      # before any data exists.
       - name: TDM validate (policy gate)
-        run: dotnet run --project src/Tdm.Host --no-build -- validate --settings tdm.settings.json
+        uses: ./.github/actions/tdm
+        with:
+          command: validate
+          settings: tdm.settings.json
+          tool: dotnet run --project src/Tdm.Host --no-build --
+          report-sarif: output/tdm-validate.sarif
+          report-junit: output/tdm-validate.junit.xml
+          manifest-artifact: tdm-validate-manifest
 
-      - name: Upload run manifest
+      - name: Upload SARIF (PR annotations)
+        if: ${{ always() && hashFiles('output/tdm-validate.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: output/tdm-validate.sarif
+          category: tdm
+
+      - name: Upload JUnit report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tdm-validate-manifest
-          path: output/*.tdm.json
+          name: tdm-validate-junit
+          path: output/tdm-validate.junit.xml
           if-no-files-found: ignore
