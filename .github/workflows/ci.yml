@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (warnings are errors)
+        run: dotnet build --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test --no-build
+
+      # The write-repository policy gate (ADR-0001) and full feature validation run
+      # against the demo settings: a PR that adds an entity without a write repository,
+      # or a feature step that no longer parses, fails here — before any data exists.
+      - name: TDM validate (policy gate)
+        run: dotnet run --project src/Tdm.Host --no-build -- validate --settings tdm.settings.json
+
+      - name: Upload run manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdm-validate-manifest
+          path: output/*.tdm.json
+          if-no-files-found: ignore
