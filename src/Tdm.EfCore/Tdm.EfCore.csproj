@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <IsPackable>true</IsPackable>
     <Description>TDM EF Core integration: entity/repository/faker resolution, persistence routing, provider bootstrap, lifecycle management.</Description>
   </PropertyGroup>
 

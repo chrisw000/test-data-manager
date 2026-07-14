@@ -12,3 +12,4 @@ plugins/
 .vs/
 .idea/
 TestResults/
+artifacts/

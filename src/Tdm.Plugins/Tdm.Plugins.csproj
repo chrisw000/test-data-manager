@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <IsPackable>true</IsPackable>
     <Description>TDM plugin hosting: isolated AssemblyLoadContext per domain, folder-based acquisition, NuGet acquisition extension point.</Description>
   </PropertyGroup>
 

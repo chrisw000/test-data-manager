@@ -5,6 +5,7 @@
          non-.NET-10 tooling; multi-targeted so WireMock-era test hosts can use it too. -->
     <TargetFramework></TargetFramework>
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
     <Description>TDM Identity Contract v1: deterministic UUIDv5 identities for synthetic test data. Frozen; changes require a contract version bump.</Description>
   </PropertyGroup>
 

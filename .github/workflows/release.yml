@@ -1,0 +1,57 @@
+name: Release
+
+# W1-D1: tag v* → build → full test suite → pack → publish.
+# NuGet packages go to GitHub Packages (swap the source URL for an internal feed);
+# the host container image goes to GHCR; .nupkgs are attached to the GitHub Release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Derive version from tag
+        run: echo "TDM_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -warnaserror -c Release -p:TdmVersion=${TDM_VERSION}
+
+      - name: Test
+        run: dotnet test --no-build -c Release -p:TdmVersion=${TDM_VERSION}
+
+      - name: Pack
+        run: dotnet pack --no-build -c Release -p:TdmVersion=${TDM_VERSION} -o artifacts
+
+      - name: Push packages to GitHub Packages
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --skip-duplicate
+
+      - name: Build and push container image
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          IMAGE="ghcr.io/${{ github.repository_owner }}/tdm"
+          docker build -t "$IMAGE:${TDM_VERSION}" -t "$IMAGE:latest" --build-arg TDM_VERSION=${TDM_VERSION} .
+          docker push "$IMAGE:${TDM_VERSION}"
+          docker push "$IMAGE:latest"
+
+      - name: Create GitHub Release with package artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg --generate-notes

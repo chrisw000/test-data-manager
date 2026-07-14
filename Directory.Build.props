@@ -13,7 +13,19 @@
   <PropertyGroup>
     <Authors>Chris Walters</Authors>
     <Product>Tdm - Gherkin-driven Test Data Manager</Product>
+    <!-- Release builds override via -p:TdmVersion={tag}; the value flows through
+         AssemblyInformationalVersion into each run manifest's tdmVersion. -->
     <Version>0.1.0</Version>
+    <Version Condition="'$(TdmVersion)' != ''">$(TdmVersion)</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Pack metadata shared by every shipped package; projects opt IN to packing. -->
+    <IsPackable>false</IsPackable>
+    <RepositoryUrl>https://github.com/chrisw000/test-data-manager</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/chrisw000/test-data-manager</PackageProjectUrl>
+    <PackageTags>test-data;seeding;gherkin;efcore;tdm</PackageTags>
   </PropertyGroup>
 
 </Project>

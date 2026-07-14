@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <IsPackable>true</IsPackable>
     <Description>TDM observability: OpenTelemetry traces/metrics wiring, JSON run report + seeding manifest writer, run summary logging.</Description>
   </PropertyGroup>
 

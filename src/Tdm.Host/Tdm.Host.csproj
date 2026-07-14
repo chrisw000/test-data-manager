@@ -3,7 +3,13 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>tdm</AssemblyName>
-    <Description>TDM console host: run | teardown | validate | list-entities.</Description>
+    <Description>TDM console host: run | teardown | validate | list-entities. Install as a dotnet tool: dotnet tool install Tdm.Tool.</Description>
+    <!-- W1-D1: the host ships as `dotnet tool install Tdm.Tool` (command name: tdm)
+         and as a container image (see Dockerfile). -->
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>tdm</ToolCommandName>
+    <PackageId>Tdm.Tool</PackageId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+output/
+.git/
+.github/
+docs/
+tests/
+features/
