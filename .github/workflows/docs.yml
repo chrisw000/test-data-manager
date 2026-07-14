@@ -1,0 +1,42 @@
+name: Docs site
+
+# W1-D5: /docs-site published to GitHub Pages on release (manual dispatch for the first
+# publish / content fixes). Requires Pages source = "GitHub Actions" in repo settings.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build site
+        run: |
+          pip install mkdocs-material
+          mkdocs build -f docs-site/mkdocs.yml --site-dir "${{ github.workspace }}/_site" --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

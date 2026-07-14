@@ -83,12 +83,46 @@ listEntitiesCommand.SetAction(async (parseResult, ct) =>
     return await composer.ListEntitiesAsync(parseResult.GetValue(domainOption), ct);
 });
 
+var initDomainOption = new Option<string?>("--domain") { Description = "Domain name to pre-fill (default: MyDomain)" };
+var initPackageOption = new Option<string?>("--package") { Description = "NuGet package id of the domain data assembly to pre-fill" };
+var initDirOption = new Option<string>("--dir") { Description = "Target directory", DefaultValueFactory = _ => "." };
+var initCommand = new Command("init", "Scaffold tdm.settings.json, a starter feature, .gitignore and a CI validate workflow.")
+{
+    initDomainOption, initPackageOption, initDirOption,
+};
+initCommand.SetAction(parseResult => InitScaffolder.Execute(
+    Path.GetFullPath(parseResult.GetValue(initDirOption)!),
+    parseResult.GetValue(initDomainOption), parseResult.GetValue(initPackageOption)));
+
+var stepArgument = new Argument<string>("step") { Description = "The step text, e.g. \"an Order exists for Customer \\\"Acme Ltd\\\"\"" };
+var keywordOption = new Option<string>("--keyword") { Description = "Gherkin keyword context", DefaultValueFactory = _ => "Given" };
+var explainCommand = new Command("explain", "Explain every pipeline decision for a single step: grammar rule, entity resolution, faker, persistence route, identity. No database connection.")
+{
+    stepArgument, settingsOption, keywordOption,
+};
+explainCommand.SetAction(async (parseResult, ct) =>
+{
+    var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!, null, null, null, null);
+    return await composer.ExplainAsync(parseResult.GetValue(keywordOption)!, parseResult.GetValue(stepArgument)!, ct);
+});
+
 root.Subcommands.Add(runCommand);
 root.Subcommands.Add(validateCommand);
 root.Subcommands.Add(teardownCommand);
 root.Subcommands.Add(listEntitiesCommand);
+root.Subcommands.Add(initCommand);
+root.Subcommands.Add(explainCommand);
 
-return await root.Parse(args).InvokeAsync();
+try
+{
+    return await root.Parse(args).InvokeAsync(new InvocationConfiguration { EnableDefaultExceptionHandler = false });
+}
+catch (Exception ex) when (ex is not OperationCanceledException)
+{
+    // Configuration/environment errors carry actionable messages — show them without a stack trace.
+    Console.Error.WriteLine($"error: {ex.Message}");
+    return 2;
+}
 
 namespace Tdm.Host
 {
@@ -254,6 +288,138 @@ namespace Tdm.Host
             finally
             {
                 await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
+        /// <summary>`tdm explain` (W1-D6): reuses StepGrammar + the real runtimes' resolution
+        /// verbatim — no parallel implementation, so the output is guaranteed truthful.
+        /// Persists nothing; model building is offline, so no database connection is opened.</summary>
+        public async Task<int> ExplainAsync(string keyword, string stepText, CancellationToken ct)
+        {
+            var step = Tdm.Core.Grammar.StepGrammar.Parse(keyword, stepText, dataTable: null, line: 1);
+            Console.WriteLine($"Step        : {keyword} {stepText}");
+
+            if (step is Tdm.Core.Grammar.UnmatchedStep)
+            {
+                Console.WriteLine("Grammar     : UNMATCHED — no TDM grammar rule fits this text.");
+                Console.WriteLine("              Verbs: exists / exist (create), is updated with, is deleted / are deleted,");
+                Console.WriteLine("              should exist (verify), an external <Entity> reference \"<key>\" from <Domain>.");
+                return 1;
+            }
+
+            var (entityName, domainPin, naturalKeyValue) = Describe(step);
+
+            var (runtimes, plugins) = await BuildRuntimesAsync(ct);
+            try
+            {
+                var matches = runtimes
+                    .Where(r => domainPin is null || string.Equals(r.Name, domainPin, StringComparison.OrdinalIgnoreCase))
+                    .Select(r => (Runtime: r, Resolved: r.TryResolveEntity(entityName, out var d, out _) ? d : null))
+                    .Where(m => m.Resolved is not null)
+                    .ToList();
+
+                switch (matches.Count)
+                {
+                    case 0:
+                        Console.WriteLine($"Resolution  : entity '{entityName}' not found in " +
+                                          (domainPin is null ? "any configured domain" : $"domain '{domainPin}'") +
+                                          " — run `tdm list-entities` to see what resolved.");
+                        break;
+                    case > 1:
+                        Console.WriteLine($"Resolution  : AMBIGUOUS — '{entityName}' exists in domains: " +
+                                          string.Join(", ", matches.Select(m => m.Runtime.Name)) +
+                                          ". Qualify the step with a domain (e.g. \"a Billing Customer ...\").");
+                        break;
+                    default:
+                        {
+                            var (runtime, descriptor) = matches[0];
+                            var info = runtime.DescribeEntities().First(i => i.LogicalName == descriptor!.LogicalName);
+                            Console.WriteLine($"Resolution  : {runtime.Name}.{info.LogicalName} → {info.ClrType}");
+                            Console.WriteLine($"  natural key : {info.NaturalKey ?? "(none configured)"}");
+                            Console.WriteLine($"  key         : {info.KeyInfo}");
+                            Console.WriteLine($"  faker       : {info.FakerSource}");
+                            Console.WriteLine($"  persist via : {info.PersistRoute}");
+                            Console.WriteLine($"  read repo   : {info.ReadRepository ?? "-"}");
+
+                            if (step is Tdm.Core.Grammar.ExternalReferenceStep)
+                            {
+                                // Identity belongs to the owning domain — printed in the External section below.
+                            }
+                            else if (naturalKeyValue is not null && descriptor!.IdStrategy == IdStrategy.Deterministic)
+                            {
+                                Console.WriteLine($"Identity    : {runtime.Name}|{info.LogicalName}|{naturalKeyValue}");
+                                Console.WriteLine($"  uuid v5     : {Tdm.Identity.TdmIdentity.ForNaturalKey(runtime.Name, info.LogicalName, naturalKeyValue)}");
+                            }
+                            else if (naturalKeyValue is not null)
+                            {
+                                Console.WriteLine($"Identity    : {descriptor!.IdStrategy} — the database assigns the id; " +
+                                                  $"'{naturalKeyValue}' is matched via the natural key column.");
+                            }
+                            else
+                            {
+                                Console.WriteLine("Identity    : no natural-key value in this step — derived at run time " +
+                                                  "from the generated/overridden natural key.");
+                            }
+                            break;
+                        }
+                }
+
+                if (step is Tdm.Core.Grammar.ExternalReferenceStep external)
+                {
+                    Console.WriteLine($"External    : owned by domain '{external.SourceDomain}' — identity contract id:");
+                    Console.WriteLine($"  {external.SourceDomain}|{external.Entity}|{external.Key} → " +
+                                      $"{Tdm.Identity.TdmIdentity.ForNaturalKey(external.SourceDomain, external.Entity, external.Key)}");
+                }
+                return 0;
+            }
+            finally
+            {
+                await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
+        /// <summary>Prints the grammar decision and extracts (entity, domain pin, natural-key value).</summary>
+        private static (string Entity, string? DomainPin, string? NaturalKey) Describe(Tdm.Core.Grammar.StepPlan step)
+        {
+            switch (step)
+            {
+                case Tdm.Core.Grammar.CreateStep create:
+                    Console.WriteLine($"Grammar     : Create — entity \"{create.Entity}\"" +
+                                      (create.Rows is { Count: > 0 } rows ? $", {rows.Count} DataTable row(s)" : $", count {create.Count}") +
+                                      (create.Domain is null ? "" : $", domain-pinned to '{create.Domain}'"));
+                    Print("overrides ", create.Overrides.Select(o => $"{o.Name} = \"{o.RawValue}\""));
+                    Print("references", create.References.Select(r => $"{r.Entity} \"{r.Key}\""));
+                    return (create.Entity, create.Domain, null);
+
+                case Tdm.Core.Grammar.UpdateStep update:
+                    Console.WriteLine($"Grammar     : Update — entity \"{update.Entity}\", key \"{update.Key}\"");
+                    Print("overrides ", update.Overrides.Select(o => $"{o.Name} = \"{o.RawValue}\""));
+                    return (update.Entity, null, update.Key);
+
+                case Tdm.Core.Grammar.DeleteStep delete:
+                    Console.WriteLine($"Grammar     : Delete — entity \"{delete.Entity}\"" +
+                                      (delete.All ? " (all matching)" : $", key \"{delete.Key}\""));
+                    Print("filter    ", delete.Filter.Select(f => $"{f.Name} = \"{f.RawValue}\""));
+                    return (delete.Entity, null, delete.Key);
+
+                case Tdm.Core.Grammar.LoadStep load:
+                    Console.WriteLine($"Grammar     : Load/verify — entity \"{load.Entity}\"" +
+                                      (load.ExpectedCount is { } n ? $", expected count {n}" : $", key \"{load.Key}\""));
+                    Print("expected  ", load.Expected.Select(e => $"{e.Name} = \"{e.RawValue}\""));
+                    return (load.Entity, null, load.Key);
+
+                case Tdm.Core.Grammar.ExternalReferenceStep external:
+                    Console.WriteLine($"Grammar     : External reference — {external.Entity} \"{external.Key}\" owned by '{external.SourceDomain}'");
+                    return (external.Entity, null, external.Key);
+
+                default:
+                    return ("", null, null);
+            }
+
+            static void Print(string label, IEnumerable<string> items)
+            {
+                var list = items.ToList();
+                if (list.Count > 0) Console.WriteLine($"  {label}: {string.Join(", ", list)}");
             }
         }
 

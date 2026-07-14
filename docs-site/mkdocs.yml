@@ -1,0 +1,30 @@
+site_name: TDM — Gherkin-driven Test Data Manager
+site_url: https://chrisw000.github.io/test-data-manager/
+repo_url: https://github.com/chrisw000/test-data-manager
+repo_name: chrisw000/test-data-manager
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      toggle: { icon: material/brightness-7, name: Dark mode }
+    - scheme: slate
+      toggle: { icon: material/brightness-4, name: Light mode }
+  features:
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Grammar reference: grammar.md
+  - Configuration reference: configuration.md
+  - Convention profiles: profiles.md
+  - Plugin packaging guide: plugin-packaging.md
+  - Troubleshooting: troubleshooting.md
+  - Decision log: decisions.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
