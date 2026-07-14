@@ -74,7 +74,7 @@ runs:
         esac
 
     - if: ${{ always() && inputs['manifest-artifact'] != '' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs['manifest-artifact'] }}
         path: ${{ inputs['manifest-path'] }}

@@ -15,9 +15,9 @@ jobs:
   build-test-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -46,14 +46,14 @@ jobs:
 
       - name: Upload SARIF (PR annotations)
         if: ${{ always() && hashFiles('output/tdm-validate.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: output/tdm-validate.sarif
           category: tdm
 
       - name: Upload JUnit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tdm-validate-junit
           path: output/tdm-validate.junit.xml
