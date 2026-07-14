@@ -11,4 +11,4 @@ Feature: Plugin-loaded domains
       """
     Then the run outcome is Succeeded
     And the Orders database has 1 customer rows
-    And the manifest entity "Customer" was persisted via "ICustomerRepository"
+    And the manifest entity "Customer" was persisted via "ICustomerWriteRepository"

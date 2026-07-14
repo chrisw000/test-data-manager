@@ -23,7 +23,7 @@ public sealed class ScenarioCloseOutcome
 /// <summary>Per-entity resolution map entry, for `tdm list-entities` and `validate`.</summary>
 public sealed record EntityResolutionInfo(
     string LogicalName, string ClrType, string? NaturalKey, string KeyInfo,
-    string? Repository, string FakerSource, string PersistRoute);
+    string? Repository, string? ReadRepository, string FakerSource, string PersistRoute);
 
 /// <summary>
 /// Everything the engine needs from a loaded domain: resolution, generation, persistence,
@@ -37,6 +37,12 @@ public interface IDomainRuntime : IAsyncDisposable
 
     /// <summary>Warnings raised while building the runtime (unresolvable repo dependencies etc.).</summary>
     IReadOnlyList<string> Warnings { get; }
+
+    /// <summary>
+    /// Write-repository policy violations (ADR-0001): entities that require a write repository
+    /// but have none bound. Non-empty fails `tdm validate` and refuses `tdm run`.
+    /// </summary>
+    IReadOnlyList<string> PolicyViolations { get; }
 
     bool TryResolveEntity(string gherkinName, out EntityDescriptor? entity, out string? error);
 

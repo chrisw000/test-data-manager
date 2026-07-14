@@ -1,22 +1,31 @@
 using Acme.Orders.Data.Persistence.Domain;
+using Microsoft.EntityFrameworkCore;
 
 namespace Acme.Orders.Data.Persistence.Repositories;
 
-/// <summary>The "well-known" repository shape the TDM probes first (handoff §5.2).</summary>
-public interface IRepository<T> where T : class
+/// <summary>
+/// The modern split-repository shape (ADR-0001): one write and one read repository per
+/// entity, deliberately not identified by any generic marker interface — TDM discovers
+/// them via the profile's I{Name}WriteRepository / I{Name}ReadRepository probe patterns.
+/// </summary>
+public interface ICustomerWriteRepository
 {
-    void Add(T entity);
-    void Update(T entity);
-    void Delete(T entity);
+    void Add(CustomerEntity entity);
+    void Update(CustomerEntity entity);
+    void Delete(CustomerEntity entity);
 }
 
-public interface ICustomerRepository : IRepository<CustomerEntity>;
+public interface ICustomerReadRepository
+{
+    Task<CustomerEntity?> GetByName(string name);
+}
 
 /// <summary>
 /// Carries the domain behaviour worth exercising during seeding — here a simple audit
-/// stamp; a real domain would validate, raise events, etc.
+/// stamp; a real domain would validate, raise events, etc. This is why TDM writes through
+/// the write repository rather than the DbContext.
 /// </summary>
-public class CustomerRepository(OrdersDbContext context) : ICustomerRepository
+public class CustomerWriteRepository(OrdersDbContext context) : ICustomerWriteRepository
 {
     public void Add(CustomerEntity entity)
     {
@@ -36,4 +45,10 @@ public class CustomerRepository(OrdersDbContext context) : ICustomerRepository
         context.Customers.Remove(entity);
         context.SaveChanges();
     }
+}
+
+public class CustomerReadRepository(OrdersDbContext context) : ICustomerReadRepository
+{
+    public Task<CustomerEntity?> GetByName(string name) =>
+        context.Customers.SingleOrDefaultAsync(c => c.Name == name);
 }

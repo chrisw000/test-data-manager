@@ -1,4 +1,4 @@
-using Acme.Orders.Data.Persistence.Domain;
+using Acme.Orders.Domain.Catalog;
 using Bogus;
 
 namespace Acme.Orders.Data.Persistence.Fakers;

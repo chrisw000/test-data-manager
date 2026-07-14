@@ -13,7 +13,7 @@ Feature: Core seeding verbs
     And the exit code is 0
     And the Orders database has 1 customer rows
     And customer "Acme Ltd" has tier "Gold"
-    And the manifest entity "Customer" was persisted via "ICustomerRepository"
+    And the manifest entity "Customer" was persisted via "ICustomerWriteRepository"
 
   Scenario: DataTable bulk create
     When I run the TDM with:

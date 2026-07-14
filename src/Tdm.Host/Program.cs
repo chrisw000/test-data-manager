@@ -115,6 +115,18 @@ namespace Tdm.Host
             var (runtimes, plugins) = await BuildRuntimesAsync(ct);
             try
             {
+                // Write-repository policy gate (ADR-0001): refuse before touching any data.
+                var violations = runtimes.SelectMany(r => r.PolicyViolations).ToList();
+                if (violations.Count > 0)
+                {
+                    foreach (var violation in violations)
+                        _log.LogError("Policy violation: {Violation}", violation);
+                    _log.LogError("{Count} write-repository policy violation(s) — fix the repositories or add explicit " +
+                                  "entities.{{Name}}.requireRepository: false exemptions in the settings file (see docs/adr-0001).",
+                        violations.Count);
+                    return 2;
+                }
+
                 var plan = new GherkinPlanParser().ParsePaths(_settings.Run.FeaturePaths, _baseDirectory);
                 var totalScenarios = plan.Features.Sum(f => f.Scenarios.Count);
                 _log.LogInformation("{Mode} {Features} feature file(s), {Scenarios} scenario(s)",
@@ -194,11 +206,13 @@ namespace Tdm.Host
 
                     Console.WriteLine();
                     Console.WriteLine($"Domain: {runtime.Name} (persistence: {runtime.Settings.Persistence}, profile: {runtime.Settings.ConventionProfile})");
-                    Console.WriteLine($"  {"entity",-18} {"clr type",-52} {"key",-28} {"natural key",-12} {"faker",-22} {"persist route"}");
+                    Console.WriteLine($"  {"entity",-18} {"clr type",-52} {"key",-28} {"natural key",-12} {"faker",-22} {"persist route",-40} {"read repo"}");
                     foreach (var info in runtime.DescribeEntities().OrderBy(i => i.LogicalName, StringComparer.Ordinal))
                     {
-                        Console.WriteLine($"  {info.LogicalName,-18} {info.ClrType,-52} {info.KeyInfo,-28} {info.NaturalKey ?? "-",-12} {info.FakerSource,-22} {info.PersistRoute}");
+                        Console.WriteLine($"  {info.LogicalName,-18} {info.ClrType,-52} {info.KeyInfo,-28} {info.NaturalKey ?? "-",-12} {info.FakerSource,-22} {info.PersistRoute,-40} {info.ReadRepository ?? "-"}");
                     }
+                    foreach (var violation in runtime.PolicyViolations)
+                        Console.WriteLine($"  !! policy: {violation}");
                     foreach (var warning in runtime.Warnings)
                         Console.WriteLine($"  ! {warning}");
                 }

@@ -56,6 +56,49 @@ public class TdmSettingsTests
         new TdmSettings().EntityFor("Anything").Should().BeSameAs(EntitySettings.Default);
 
     [Fact]
+    public void ModernProfile_SplitRepositoryPatterns_AndPolicyOn()
+    {
+        var modern = ConventionProfile.BuiltIn["modern"];
+        modern.WriteRepositoryPatterns.Should().Equal("I{Name}WriteRepository", "I{Name}Repository");
+        modern.ReadRepositoryPatterns.Should().Equal("I{Name}ReadRepository", "I{Name}Repository");
+        modern.RequireWriteRepository.Should().BeTrue();
+
+        var legacy = ConventionProfile.BuiltIn["legacy"];
+        legacy.WriteRepositoryPatterns.Should().Equal("I{Name}Repository");
+        legacy.RequireWriteRepository.Should().BeFalse();
+    }
+
+    [Fact]
+    public void RepositoryPattern_BackCompat_PrependsToBothLists()
+    {
+        var profile = new ConventionProfile { RepositoryPattern = "I{Name}Repo" };
+        profile.WriteRepositoryPatterns.Should().StartWith("I{Name}Repo");
+        profile.ReadRepositoryPatterns.Should().StartWith("I{Name}Repo");
+    }
+
+    [Fact]
+    public void Load_PerEntityRepositoryPolicyOverrides()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"tdm-settings-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """
+            {
+              "entities": {
+                "Product": { "requireRepository": false },
+                "Customer": { "writeRepository": "ILegacyCustomerGateway" }
+              }
+            }
+            """);
+        try
+        {
+            var settings = TdmSettings.Load(path);
+            settings.EntityFor("Product").RequireRepository.Should().BeFalse();
+            settings.EntityFor("Customer").WriteRepository.Should().Be("ILegacyCustomerGateway");
+            settings.EntityFor("Order").RequireRepository.Should().BeNull(); // inherit profile
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void ResolveConnectionString_InlineWins() =>
         new DomainSettings { Name = "D", ConnectionString = "inline", ConnectionStringName = "IGNORED" }
             .ResolveConnectionString().Should().Be("inline");

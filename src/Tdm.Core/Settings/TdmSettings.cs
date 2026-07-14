@@ -120,7 +120,42 @@ public sealed class ConventionProfile
     /// <summary>Informational only — folders do not exist in compiled assemblies (handoff §4).</summary>
     public string? EntityFolder { get; set; }
     public string EntityClassPattern { get; set; } = "{Name}";
-    public string RepositoryPattern { get; set; } = "I{Name}Repository";
+
+    /// <summary>
+    /// Ordered probe patterns for the write-side repository interface. The first interface
+    /// found wins; its Add/Update/Delete methods carry TDM's persistence (ADR-0001).
+    /// </summary>
+    public List<string> WriteRepositoryPatterns { get; set; } = ["I{Name}Repository"];
+
+    /// <summary>
+    /// Ordered probe patterns for the read-side repository interface. Discovered for
+    /// reporting (list-entities) only — TDM's verification reads go through the DbContext.
+    /// </summary>
+    public List<string> ReadRepositoryPatterns { get; set; } = ["I{Name}Repository"];
+
+    /// <summary>
+    /// Back-compat single pattern: when set, it is prepended to both
+    /// <see cref="WriteRepositoryPatterns"/> and <see cref="ReadRepositoryPatterns"/>.
+    /// </summary>
+    public string? RepositoryPattern
+    {
+        get => _repositoryPattern;
+        set
+        {
+            _repositoryPattern = value;
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (!WriteRepositoryPatterns.Contains(value)) WriteRepositoryPatterns.Insert(0, value);
+            if (!ReadRepositoryPatterns.Contains(value)) ReadRepositoryPatterns.Insert(0, value);
+        }
+    }
+    private string? _repositoryPattern;
+
+    /// <summary>
+    /// Policy: every persistable entity must have a write repository (ADR-0001). Violations
+    /// fail `tdm validate` / refuse `tdm run`; opt out per entity via entities.{Name}.requireRepository.
+    /// </summary>
+    public bool RequireWriteRepository { get; set; }
+
     public string FakerPattern { get; set; } = "{Name}Faker";
     public string NaturalKeyDefault { get; set; } = "Name";
 
@@ -137,6 +172,11 @@ public sealed class ConventionProfile
                 EntityNamespaceSuffix = "Data.Persistence.Domain",
                 EntityFolder = "Entity",
                 EntityClassPattern = "{Name}Entity",
+                // Split read/write repositories per entity; plain I{Name}Repository accepted
+                // where a split pair has not been introduced yet.
+                WriteRepositoryPatterns = ["I{Name}WriteRepository", "I{Name}Repository"],
+                ReadRepositoryPatterns = ["I{Name}ReadRepository", "I{Name}Repository"],
+                RequireWriteRepository = true,
             },
             ["legacy"] = new()
             {
@@ -153,6 +193,11 @@ public sealed class EntitySettings
 
     public string? NaturalKey { get; set; }
     public IdStrategy IdStrategy { get; set; } = IdStrategy.Auto;
+    /// <summary>Overrides the profile's <see cref="ConventionProfile.RequireWriteRepository"/> policy
+    /// for this entity — set false for aggregate children / projections persisted via their root.</summary>
+    public bool? RequireRepository { get; set; }
+    /// <summary>Explicit write-repository interface name when the repo defies the profile patterns.</summary>
+    public string? WriteRepository { get; set; }
     public ExternalBehavior ExternalBehavior { get; set; } = ExternalBehavior.FkOnly;
     /// <summary>Logical name of the local read-model entity seeded when <see cref="ExternalBehavior.Projection"/> applies.</summary>
     public string? ProjectionEntity { get; set; }

@@ -35,7 +35,8 @@
     }
   ],
   "entities": {
-    "Product": { "naturalKey": "Sku" },
+    // Product has no write repository by design — explicit policy exemption (docs/adr-0001).
+    "Product": { "naturalKey": "Sku", "requireRepository": false },
     "Order": { "naturalKey": "OrderNumber" },
     "Invoice": { "naturalKey": "InvoiceNumber" },
     "Customer": { "externalBehavior": "Projection", "projectionEntity": "CustomerSummary" },

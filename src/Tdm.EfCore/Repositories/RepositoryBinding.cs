@@ -4,14 +4,21 @@ using Tdm.Core.Settings;
 
 namespace Tdm.EfCore.Repositories;
 
+/// <summary>A discovered read-side repository — reporting only; TDM's verification reads go through the DbContext (ADR-0001).</summary>
+internal sealed record ReadRepositoryInfo(Type InterfaceType, Type ImplementationType);
+
 /// <summary>
-/// A discovered repository for one entity (handoff §5.2): the profile-pattern interface
-/// (e.g. <c>ICustomerRepository</c>) plus its implementation, with persist methods matched
-/// in order: exact well-known <c>IRepository&lt;T&gt;</c>, else duck-typed method-name
-/// conventions with a single entity-typed parameter.
+/// A discovered write-side repository for one entity (handoff §5.2, ADR-0001): the first
+/// interface matching the profile's ordered probe patterns (e.g. <c>ICustomerWriteRepository</c>,
+/// falling back to <c>ICustomerRepository</c>) plus its implementation, with persist methods
+/// matched in order: exact well-known generic (<c>IRepository&lt;T&gt;</c>,
+/// <c>IWriteRepository&lt;T&gt;</c>, <c>IRepositoryWrite&lt;T&gt;</c>), else duck-typed
+/// method-name conventions with a single entity-typed parameter.
 /// </summary>
 internal sealed class RepositoryBinding
 {
+    private static readonly string[] WellKnownGenericNames = ["IRepository`1", "IWriteRepository`1", "IRepositoryWrite`1"];
+
     public required Type InterfaceType { get; init; }
     public required Type ImplementationType { get; init; }
     public MethodInfo? AddMethod { get; init; }
@@ -19,24 +26,23 @@ internal sealed class RepositoryBinding
     public MethodInfo? DeleteMethod { get; init; }
 
     public static RepositoryBinding? Find(string logicalName, Type entityType,
-        ConventionProfile profile, IReadOnlyList<Assembly> assemblies)
+        ConventionProfile profile, EntitySettings entitySettings, IReadOnlyList<Assembly> assemblies)
     {
-        var wantedName = NameMatcher.Expand(profile.RepositoryPattern, logicalName);
         var allTypes = assemblies.SelectMany(DbContextActivator.SafeGetTypes).ToList();
 
-        var interfaceType = allTypes.FirstOrDefault(t =>
-            t.IsInterface && string.Equals(t.Name, wantedName, StringComparison.OrdinalIgnoreCase));
-        if (interfaceType is null) return null;
+        // An explicit per-entity interface name wins over the profile's probe patterns.
+        IEnumerable<string> wantedNames = entitySettings.WriteRepository is { Length: > 0 } explicitName
+            ? [explicitName]
+            : profile.WriteRepositoryPatterns.Select(p => NameMatcher.Expand(p, logicalName));
 
-        var implementationType = allTypes.FirstOrDefault(t =>
-            t is { IsClass: true, IsAbstract: false } && interfaceType.IsAssignableFrom(t));
-        if (implementationType is null) return null;
+        var (interfaceType, implementationType) = Probe(wantedNames, allTypes);
+        if (interfaceType is null || implementationType is null) return null;
 
-        // All methods reachable through the repository interface, well-known IRepository<T> first.
+        // All methods reachable through the repository interface, well-known generics first.
         var interfaces = new List<Type> { interfaceType };
         interfaces.AddRange(interfaceType.GetInterfaces());
         var wellKnown = interfaces.FirstOrDefault(i =>
-            i.IsGenericType && i.Name is "IRepository`1" && i.GetGenericArguments()[0] == entityType);
+            i.IsGenericType && WellKnownGenericNames.Contains(i.Name) && i.GetGenericArguments()[0] == entityType);
         var searchOrder = wellKnown is null ? interfaces : [wellKnown, .. interfaces.Where(i => i != wellKnown)];
         var methods = searchOrder.SelectMany(i => i.GetMethods()).ToList();
 
@@ -48,6 +54,33 @@ internal sealed class RepositoryBinding
             UpdateMethod = Match(methods, profile.UpdateMethodNames, logicalName, entityType),
             DeleteMethod = Match(methods, profile.DeleteMethodNames, logicalName, entityType),
         };
+    }
+
+    public static ReadRepositoryInfo? FindRead(string logicalName,
+        ConventionProfile profile, IReadOnlyList<Assembly> assemblies)
+    {
+        var allTypes = assemblies.SelectMany(DbContextActivator.SafeGetTypes).ToList();
+        var wantedNames = profile.ReadRepositoryPatterns.Select(p => NameMatcher.Expand(p, logicalName));
+        var (interfaceType, implementationType) = Probe(wantedNames, allTypes);
+        return interfaceType is null || implementationType is null
+            ? null
+            : new ReadRepositoryInfo(interfaceType, implementationType);
+    }
+
+    /// <summary>First name whose interface AND a concrete implementation both exist wins.</summary>
+    private static (Type? Interface, Type? Implementation) Probe(IEnumerable<string> wantedNames, List<Type> allTypes)
+    {
+        foreach (var wantedName in wantedNames)
+        {
+            var interfaceType = allTypes.FirstOrDefault(t =>
+                t.IsInterface && string.Equals(t.Name, wantedName, StringComparison.OrdinalIgnoreCase));
+            if (interfaceType is null) continue;
+
+            var implementationType = allTypes.FirstOrDefault(t =>
+                t is { IsClass: true, IsAbstract: false } && interfaceType.IsAssignableFrom(t));
+            if (implementationType is not null) return (interfaceType, implementationType);
+        }
+        return (null, null);
     }
 
     private static MethodInfo? Match(List<MethodInfo> methods, List<string> namePatterns,

@@ -25,6 +25,8 @@ internal sealed class EntityBinding
     public Type? ContextType { get; init; }
     public Microsoft.EntityFrameworkCore.Metadata.IEntityType? EfType { get; init; }
     public RepositoryBinding? Repository { get; init; }
+    /// <summary>Reporting only — verification reads go through the DbContext (ADR-0001).</summary>
+    public ReadRepositoryInfo? ReadRepository { get; init; }
     public FakerBinding? Faker { get; init; }
     /// <summary>Key + FK columns + navigations — never auto-faked.</summary>
     public required IReadOnlySet<string> AutoFakerSkip { get; init; }
@@ -56,7 +58,8 @@ public sealed class DomainRuntime : IDomainRuntime
     private bool _schemaEnsured;
 
     internal DomainRuntime(DomainSettings settings, TdmSettings root, IReadOnlyList<Assembly> assemblies,
-        IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings, List<string> warnings, ILogger? logger)
+        IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings, List<string> warnings,
+        List<string> policyViolations, ILogger? logger)
     {
         Settings = settings;
         _root = root;
@@ -64,6 +67,7 @@ public sealed class DomainRuntime : IDomainRuntime
         _contextTypes = contextTypes;
         _bindings = bindings;
         _warnings = warnings;
+        PolicyViolations = policyViolations;
         _log = logger ?? NullLogger.Instance;
         Entities = bindings.Select(b => b.Descriptor).ToList();
     }
@@ -72,6 +76,7 @@ public sealed class DomainRuntime : IDomainRuntime
     public DomainSettings Settings { get; }
     public IReadOnlyList<EntityDescriptor> Entities { get; }
     public IReadOnlyList<string> Warnings => _warnings;
+    public IReadOnlyList<string> PolicyViolations { get; }
 
     // ---------------------------------------------------------------- Resolution
 
@@ -104,6 +109,7 @@ public sealed class DomainRuntime : IDomainRuntime
                 : $"{b.Descriptor.KeyProperty.Name}:{b.Descriptor.KeyProperty.PropertyType.Name}" +
                   (b.Descriptor.KeyIsDbGenerated ? " (db-generated)" : $" ({b.Descriptor.IdStrategy})"),
             b.Repository is null ? null : $"{b.Repository.InterfaceType.Name} → {b.Repository.ImplementationType.Name}",
+            b.ReadRepository is null ? null : $"{b.ReadRepository.InterfaceType.Name} → {b.ReadRepository.ImplementationType.Name}",
             b.Faker?.FakerType.Name ?? "auto",
             PredictRoute(b))).ToList();
 
@@ -241,7 +247,7 @@ public sealed class DomainRuntime : IDomainRuntime
         if (binding.ContextType is null)
         {
             throw new InvalidOperationException(
-                $"Entity '{binding.Descriptor.LogicalName}' was resolved by assembly scan but is not mapped " +
+                $"Entity '{binding.Descriptor.LogicalName}' was resolved by fallback discovery but is not mapped " +
                 $"in any DbContext model of domain '{Name}' — it cannot be persisted or queried.");
         }
         return _contexts[binding.ContextType];

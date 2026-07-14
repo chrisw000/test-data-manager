@@ -36,7 +36,8 @@ public sealed class TestDomains : IAsyncDisposable
             ],
             Entities =
             {
-                ["Product"] = new EntitySettings { NaturalKey = "Sku" },
+                // Product has no write repository by design — exempted from the policy (ADR-0001).
+                ["Product"] = new EntitySettings { NaturalKey = "Sku", RequireRepository = false },
                 ["Order"] = new EntitySettings { NaturalKey = "OrderNumber" },
                 ["Invoice"] = new EntitySettings { NaturalKey = "InvoiceNumber" },
                 ["CustomerSummary"] = new EntitySettings { NaturalKey = "Name" },

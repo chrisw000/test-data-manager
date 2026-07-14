@@ -79,6 +79,8 @@ Full handoffs: [Wave 1](wave-1-handoff.md) · [Wave 2](wave-2-handoff.md) ·
 ## 5. Policy as code
 
 The highest-leverage multi-team feature; `validate` is the natural enforcement point.
+*(First instance shipped: the write-repository policy gate —
+[ADR-0001](adr-0001-data-access-via-repositories.md).)*
 A `tdm.policy.json` (or OPA/Rego for orgs already invested) evaluated before any persistence:
 
 - **Environment rules**: no `Persistent` lifecycle against shared environments without an

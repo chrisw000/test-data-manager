@@ -14,9 +14,14 @@ public class DomainRuntimeBuilderTests
         await using var runtime = domains.BuildOrders();
 
         runtime.Entities.Select(e => e.LogicalName).OrderBy(n => n, StringComparer.Ordinal)
-            .Should().Equal("Customer", "Order", "Product");
+            .Should().Equal("Customer", "Order", "Product", "Warehouse");
         runtime.TryResolveEntity("customers", out var customer, out _).Should().BeTrue(); // plural + case tolerant
         customer!.ClrType.Should().Be(typeof(CustomerEntity));
+
+        // ProductEntity lives outside the conventional namespace ("defined elsewhere in the
+        // domain layer") — EF-model-first discovery finds it regardless.
+        runtime.TryResolveEntity("Product", out var product, out _).Should().BeTrue();
+        product!.ClrType.Should().Be(typeof(Acme.Orders.Domain.Catalog.ProductEntity));
     }
 
     [Fact]
@@ -72,26 +77,100 @@ public class DomainRuntimeBuilderTests
     }
 
     [Fact]
-    public async Task DescribeEntities_ReportsRepositoryFakerAndRoute()
+    public async Task DescribeEntities_ReportsSplitRepositoriesFakerAndRoute()
     {
         await using var domains = new TestDomains();
         await using var runtime = domains.BuildOrders();
         var described = runtime.DescribeEntities().ToDictionary(i => i.LogicalName);
 
-        // Well-known IRepository<T> shape.
-        described["Customer"].Repository.Should().Contain("ICustomerRepository");
-        described["Customer"].PersistRoute.Should().Be("ICustomerRepository.Add");
+        // Split read/write pair, no generic marker interface — probed by pattern (ADR-0001).
+        described["Customer"].Repository.Should().Be("ICustomerWriteRepository → CustomerWriteRepository");
+        described["Customer"].ReadRepository.Should().Be("ICustomerReadRepository → CustomerReadRepository");
+        described["Customer"].PersistRoute.Should().Be("ICustomerWriteRepository.Add");
         described["Customer"].FakerSource.Should().Be("CustomerFaker");
 
-        // Duck-typed Add{Name} match.
+        // Plain I{Name}Repository fallback pattern + duck-typed Add{Name} match; the same
+        // interface doubles as the read repo via the read-pattern fallback.
         described["Order"].PersistRoute.Should().Be("IOrderRepository.AddOrder");
+        described["Order"].ReadRepository.Should().Be("IOrderRepository → OrderRepository");
         described["Order"].FakerSource.Should().Be("auto");
 
-        // No repository → DbContext fallback, warned.
+        // Read repository without a write repository → DbContext persist route.
         described["Product"].Repository.Should().BeNull();
+        described["Product"].ReadRepository.Should().Be("IProductReadRepository → ProductReadRepository");
         described["Product"].PersistRoute.Should().StartWith("DbContext");
-        runtime.Warnings.Should().Contain(w => w.Contains("IProductRepository"));
+        runtime.Warnings.Should().Contain(w => w.Contains("IProductRepository") && w.Contains("exempted"));
         runtime.Warnings.Should().Contain(w => w.Contains("OrderFaker"));
+    }
+
+    // ---------------------------------------------------------------- Write-repository policy (ADR-0001)
+
+    [Fact]
+    public async Task Policy_ExemptedEntity_NoViolation()
+    {
+        await using var domains = new TestDomains();
+        await using var runtime = domains.BuildOrders();
+        runtime.PolicyViolations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Policy_RequiredWriteRepositoryMissing_RecordsViolation()
+    {
+        await using var domains = new TestDomains();
+        // Remove Product's exemption: the modern profile requires a write repository.
+        domains.Settings.Entities["Product"] = new EntitySettings { NaturalKey = "Sku" };
+        await using var runtime = domains.BuildOrders();
+
+        var violation = runtime.PolicyViolations.Should().ContainSingle().Subject;
+        violation.Should().Contain("Orders.Product")
+            .And.Contain("IProductWriteRepository")  // names the probed patterns
+            .And.Contain("requireRepository");       // and the way out
+    }
+
+    [Fact]
+    public async Task Policy_ExplicitWriteRepositoryName_WinsOverPatterns()
+    {
+        await using var domains = new TestDomains();
+        domains.Settings.Entities["Customer"] = new EntitySettings { WriteRepository = "ICustomerWriteRepository" };
+        await using var explicitHit = domains.BuildOrders();
+        explicitHit.DescribeEntities().Single(i => i.LogicalName == "Customer")
+            .PersistRoute.Should().Be("ICustomerWriteRepository.Add");
+
+        domains.Settings.Entities["Customer"] = new EntitySettings { WriteRepository = "INoSuchRepository" };
+        await using var explicitMiss = domains.BuildOrders();
+        explicitMiss.PolicyViolations.Should().Contain(v =>
+            v.Contains("Orders.Customer") && v.Contains("INoSuchRepository"));
+    }
+
+    [Fact]
+    public async Task Policy_DbContextOnlyDomain_IsADeclaredChoice_NoViolations()
+    {
+        await using var domains = new TestDomains(ordersPersistence: PersistenceMode.DbContextOnly);
+        await using var runtime = domains.BuildOrders();
+        runtime.PolicyViolations.Should().BeEmpty();
+    }
+
+    // ---------------------------------------------------------------- IEntityTypeConfiguration cross-check
+
+    [Fact]
+    public async Task ConfiguredButUnmappedEntity_DiscoveredWithCrossCheckWarning()
+    {
+        await using var domains = new TestDomains();
+        await using var runtime = domains.BuildOrders();
+
+        // WarehouseEntityConfiguration exists but was never applied in OrdersDbContext.
+        runtime.TryResolveEntity("Warehouse", out var warehouse, out _).Should().BeTrue();
+        warehouse!.ClrType.Name.Should().Be("WarehouseEntity");
+        runtime.Warnings.Should().Contain(w =>
+            w.Contains("WarehouseEntityConfiguration") && w.Contains("not mapped"));
+
+        // Generation-only: persisting reports a clear error rather than exploding.
+        await runtime.BeginScenarioAsync(LifecycleMode.Persistent, seed: 1, TestContext.Current.CancellationToken);
+        var outcome = await runtime.CreateAsync(warehouse, new Acme.Orders.Data.Persistence.Domain.WarehouseEntity(),
+            ct: TestContext.Current.CancellationToken);
+        outcome.Success.Should().BeFalse();
+        outcome.Error.Should().Contain("not mapped");
+        await runtime.EndScenarioAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using Acme.Billing.Data.Infrastructure;
 using Acme.Orders.Data.Persistence.Domain;
+using Acme.Orders.Domain.Catalog;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Tdm.Core.Execution;
@@ -97,7 +98,7 @@ public class DomainRuntimeTests
         await runtime.EndScenarioAsync(Ct);
 
         outcome.Success.Should().BeTrue(outcome.Error);
-        outcome.Route.Should().Be("ICustomerRepository.Add");
+        outcome.Route.Should().Be("ICustomerWriteRepository.Add");
         instance.CreatedUtc.Should().NotBe(default); // audit stamp from the repository
 
         await using var verify = domains.NewOrdersContext();

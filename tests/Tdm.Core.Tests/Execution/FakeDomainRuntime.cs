@@ -29,6 +29,7 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
     public DomainSettings Settings { get; } = new() { Name = name };
     public IReadOnlyList<EntityDescriptor> Entities { get; } = descriptors;
     public IReadOnlyList<string> Warnings => [];
+    public IReadOnlyList<string> PolicyViolations => [];
 
     public Dictionary<string, List<object>> Store { get; } =
         descriptors.ToDictionary(d => d.LogicalName, _ => new List<object>());
