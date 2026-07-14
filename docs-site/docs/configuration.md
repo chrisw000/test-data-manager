@@ -14,7 +14,11 @@ starting point with `tdm init`.
   "featurePaths": ["features/**/*.feature"],
   "benchmark": false,
   "bulkChunkSize": 500,              // AddRange+SaveChanges batch size for count-bulk creates
-  "outputPath": "./output"           // manifests land here
+  "outputPath": "./output",          // manifests land here
+  "signing": {                       // optional — see docs/audit-and-signing.md
+    "certificatePath": "./keys/tdm-signing.pfx",
+    "certificatePasswordEnv": "TDM_SIGNING_CERT_PASSWORD"
+  }
 }
 ```
 
@@ -23,6 +27,9 @@ starting point with `tdm init`.
 - **lifecycle** — `Persistent` rows stay; `Transactional` rolls everything back at scenario
   end; `TrackedTeardown` deletes created rows in reverse dependency order.
   Scenario tags `@persistent` / `@ephemeral` override per scenario.
+- **signing** — every manifest gets a SHA-256 checksum regardless; configuring `signing`
+  additionally writes a detached signature (`<manifest>.sig`), verified with
+  `tdm manifest verify <file> --cert <public-cert>`.
 
 ## plugins
 
@@ -93,6 +100,7 @@ Per-entity overrides, keyed by logical name:
 | `tdm teardown --manifest <file>` | Delete manifest-recorded rows in reverse order |
 | `tdm list-entities [--domain X]` | Resolved entity → CLR type, keys, faker, write/read repository |
 | `tdm explain "<step text>" [--keyword When]` | Every pipeline decision for one step; no DB connection |
+| `tdm manifest verify <file> [--cert <public-cert>]` | Check a manifest's checksum and, if present, signature — see [audit-and-signing](https://github.com/chrisw000/test-data-manager/blob/main/docs/audit-and-signing.md) |
 
 `--report <format>=<path>` (repeatable, on run/validate): `sarif` for PR annotations,
 `junit` for CI test UIs. A composite GitHub Action wrapping all of this ships in-repo at

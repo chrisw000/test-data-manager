@@ -45,6 +45,37 @@ public sealed class RunInfo
     /// when NuGet acquisition is used — a run is reproducible down to the plugin version (W1-D2).</summary>
     public Dictionary<string, string> PluginPackages { get; set; } = [];
     public Dictionary<string, BenchmarkStats> Benchmark { get; set; } = [];
+    /// <summary>Who/what ran this and against which config (W2-D1). Consumed alongside the
+    /// checksum/signature written next to the manifest file — see docs/audit-and-signing.md.</summary>
+    public AttributionInfo Attribution { get; set; } = new();
+    /// <summary>Synthetic-data attestation (W2-D1): classifies every generator source used in
+    /// the run. All sources are synthetic by construction in v1.</summary>
+    public AttestationInfo Attestation { get; set; } = new();
+}
+
+/// <summary>Runner identity, git state and config hash captured at manifest-build time (W2-D1).
+/// Populated by the host (Tdm.Observability.Audit.AttributionCollector) — Tdm.Core stays
+/// environment-free.</summary>
+public sealed class AttributionInfo
+{
+    /// <summary>"github-actions:{server}/{repo}/actions/runs/{id}#{actor}", "ci:{url}", or "local:{username}".</summary>
+    public string RunnerId { get; set; } = "";
+    public string Hostname { get; set; } = "";
+    /// <summary>HEAD commit of the repository containing the settings/feature files, if resolvable.</summary>
+    public string? GitSha { get; set; }
+    /// <summary>True if that repository had uncommitted changes at run time.</summary>
+    public bool? GitDirty { get; set; }
+    /// <summary>SHA-256 (hex) of tdm.settings.json as loaded — tamper-evidence for the config, not just the data.</summary>
+    public string? SettingsFileSha256 { get; set; }
+}
+
+/// <summary>Classification of the generator sources that produced this run's data (W2-D1).
+/// Becomes falsifiable once Wave 4 explores production-data subsetting.</summary>
+public sealed class AttestationInfo
+{
+    public bool SyntheticOnly { get; set; } = true;
+    /// <summary>Distinct sources observed: ConventionFaker, AutoFaker, Override, IdentityContract.</summary>
+    public List<string> Sources { get; set; } = [];
 }
 
 public sealed class ScenarioManifest

@@ -106,12 +106,32 @@ explainCommand.SetAction(async (parseResult, ct) =>
     return await composer.ExplainAsync(parseResult.GetValue(keywordOption)!, parseResult.GetValue(stepArgument)!, ct);
 });
 
+var manifestFileArgument = new Argument<string>("file") { Description = "Path to a .tdm.json manifest" };
+var verifyCertOption = new Option<string?>("--cert")
+{
+    Description = "Public certificate (.cer/.pem) to verify a detached signature, if one is present",
+};
+var manifestVerifyCommand = new Command("verify",
+    "Verify a manifest's checksum and, if present, its signature (W2-D2). Exit 0 fully verified, 1 partially (signature present but --cert not given), 2 failed/tampered.")
+{
+    manifestFileArgument, verifyCertOption,
+};
+manifestVerifyCommand.SetAction(parseResult =>
+{
+    var outcome = Tdm.Observability.Audit.ManifestSigner.Verify(
+        parseResult.GetValue(manifestFileArgument)!, parseResult.GetValue(verifyCertOption));
+    Console.WriteLine(outcome.Message);
+    return outcome.ExitCode;
+});
+var manifestCommand = new Command("manifest", "Manifest integrity utilities.") { manifestVerifyCommand };
+
 root.Subcommands.Add(runCommand);
 root.Subcommands.Add(validateCommand);
 root.Subcommands.Add(teardownCommand);
 root.Subcommands.Add(listEntitiesCommand);
 root.Subcommands.Add(initCommand);
 root.Subcommands.Add(explainCommand);
+root.Subcommands.Add(manifestCommand);
 
 try
 {
@@ -130,14 +150,16 @@ namespace Tdm.Host
     internal sealed class HostComposer
     {
         private readonly TdmSettings _settings;
+        private readonly string _settingsFilePath;
         private readonly string _baseDirectory;
         private readonly bool _updatePlugins;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _log;
 
-        private HostComposer(TdmSettings settings, string baseDirectory, bool updatePlugins)
+        private HostComposer(TdmSettings settings, string settingsFilePath, string baseDirectory, bool updatePlugins)
         {
             _settings = settings;
+            _settingsFilePath = settingsFilePath;
             _baseDirectory = baseDirectory;
             _updatePlugins = updatePlugins;
             _loggerFactory = LoggerFactory.Create(builder => builder
@@ -159,7 +181,7 @@ namespace Tdm.Host
             if (policy is { } p) settings.Run.FailurePolicy = p;
             if (lifecycle is { } l) settings.Run.Lifecycle = l;
             if (benchmark is { } b) settings.Run.Benchmark = b;
-            return new HostComposer(settings, Path.GetDirectoryName(fullPath)!, updatePlugins);
+            return new HostComposer(settings, fullPath, Path.GetDirectoryName(fullPath)!, updatePlugins);
         }
 
         public async Task<int> RunAsync(bool dryRun, CancellationToken ct) =>
@@ -196,9 +218,21 @@ namespace Tdm.Host
                 foreach (var (packageId, version) in plugin.Packages)
                     manifest.Run.PluginPackages[$"{plugin.DomainName}:{packageId}"] = version;
 
+                // Attribution captured into the manifest itself, not a side file — one audit
+                // artifact, so signing covers it all at once (W2-D1).
+                manifest.Run.Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath);
+
                 var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
                 var manifestFile = ManifestWriter.Write(manifest, outputPath);
                 _log.LogInformation("Manifest written: {Path}", manifestFile);
+
+                var checksumPath = Tdm.Observability.Audit.ManifestSigner.WriteChecksum(manifestFile);
+                _log.LogInformation("Checksum written: {Path}", checksumPath);
+                if (_settings.Run.Signing is { } signing)
+                {
+                    var sigPath = Tdm.Observability.Audit.ManifestSigner.SignFromSettings(manifestFile, signing);
+                    _log.LogInformation("Manifest signed: {Path}", sigPath);
+                }
 
                 foreach (var (format, path) in reports)
                 {

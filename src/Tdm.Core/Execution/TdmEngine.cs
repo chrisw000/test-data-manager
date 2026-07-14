@@ -117,6 +117,7 @@ public sealed class TdmEngine(
             : manifest.Scenarios.Any(s => s.Outcome == ScenarioOutcome.CompletedWithWarnings) ||
               manifest.Teardown.Orphaned.Count > 0 ? RunOutcome.CompletedWithWarnings
             : RunOutcome.Succeeded;
+        manifest.Run.Attestation = AttestationBuilder.Build(manifest);
 
         runActivity?.SetTag("tdm.outcome", manifest.Run.Outcome.ToString());
         _log.LogInformation("Run {Run} finished: {Outcome} in {Ms:F0} ms ({Scenarios} scenarios)",

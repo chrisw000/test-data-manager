@@ -76,6 +76,17 @@ public sealed class RunSettings
     /// <summary>Bulk creates are chunked into AddRange + SaveChanges batches of this size (handoff §12).</summary>
     public int BulkChunkSize { get; set; } = 500;
     public string OutputPath { get; set; } = "./output";
+    /// <summary>Optional detached-signature manifest signing (W2-D2). A SHA-256 checksum is
+    /// always written next to the manifest regardless of whether this is configured.</summary>
+    public SigningSettings? Signing { get; set; }
+}
+
+public sealed class SigningSettings
+{
+    /// <summary>Path to a PKCS#12 (.pfx) certificate containing the private signing key.</summary>
+    public string CertificatePath { get; set; } = "";
+    /// <summary>Name of the environment variable holding the certificate's password; unset/empty = no password.</summary>
+    public string? CertificatePasswordEnv { get; set; }
 }
 
 public enum PluginAcquisitionMode { Folder, NuGet }
