@@ -123,6 +123,28 @@ explainCommand.SetAction(async (parseResult, ct) =>
     return await composer.ExplainAsync(parseResult.GetValue(keywordOption)!, parseResult.GetValue(stepArgument)!, ct);
 });
 
+var replayCommand = new Command("replay",
+    "Re-create exactly the rows a manifest records — final values, not fakers (W2-D9). Idempotent; only Persistent scenarios play back.")
+{
+    settingsOption, manifestOption,
+};
+replayCommand.SetAction(async (parseResult, ct) =>
+{
+    var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!, null, null, null, null);
+    return await composer.ReplayAsync(parseResult.GetValue(manifestOption)!, ct);
+});
+
+var verifyCommand = new Command("verify",
+    "Drift check (W2-D9): assert every manifest-recorded row still exists with its recorded values. Exit 0 no drift, 1 drift. (File integrity is `tdm manifest verify`.)")
+{
+    settingsOption, manifestOption,
+};
+verifyCommand.SetAction(async (parseResult, ct) =>
+{
+    var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!, null, null, null, null);
+    return await composer.VerifyDriftAsync(parseResult.GetValue(manifestOption)!, ct);
+});
+
 var manifestFileArgument = new Argument<string>("file") { Description = "Path to a .tdm.json manifest" };
 var verifyCertOption = new Option<string?>("--cert")
 {
@@ -149,6 +171,8 @@ root.Subcommands.Add(listEntitiesCommand);
 root.Subcommands.Add(initCommand);
 root.Subcommands.Add(explainCommand);
 root.Subcommands.Add(manifestCommand);
+root.Subcommands.Add(replayCommand);
+root.Subcommands.Add(verifyCommand);
 
 try
 {
@@ -173,6 +197,7 @@ namespace Tdm.Host
         private readonly string? _environmentName;
         private readonly string _policyFilePath;
         private readonly string? _approvalToken;
+        private readonly Tdm.Core.Secrets.SecretChain _secrets;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _log;
 
@@ -186,6 +211,8 @@ namespace Tdm.Host
             _environmentName = environmentName;
             _policyFilePath = policyFilePath;
             _approvalToken = approvalToken;
+            // Fails fast when settings name a cloud provider without a registered adapter (W2-D8).
+            _secrets = Tdm.Core.Secrets.SecretChainFactory.Create(settings.Secrets);
             _loggerFactory = LoggerFactory.Create(builder => builder
                 .AddSimpleConsole(o =>
                 {
@@ -259,7 +286,7 @@ namespace Tdm.Host
                             Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath),
                         },
                     };
-                    WriteManifestArtifacts(refusal, reports);
+                    await WriteManifestArtifactsAsync(refusal, reports, ct);
                     return refusal.ExitCode;
                 }
                 if (overrideApplied)
@@ -270,11 +297,14 @@ namespace Tdm.Host
 
                 // Run registry + environment locks (W2-D7): registered and leased before any
                 // seeding, released on dispose. Validate never touches data, so no locks.
+                var registryApiKey = string.IsNullOrEmpty(_settings.Registry.ApiKeyEnv)
+                    ? null
+                    : await _secrets.GetSecretAsync(_settings.Registry.ApiKeyEnv, ct);
                 await using var registry = dryRun
                     ? null
                     : await RegistrySession.StartAsync(_settings, _environmentName,
                         Tdm.Observability.Audit.AttributionCollector.DetectRunnerId(
-                            Environment.GetEnvironmentVariable, Environment.UserName), _log, ct);
+                            Environment.GetEnvironmentVariable, Environment.UserName), registryApiKey, _log, ct);
                 if (registry?.RefusalReason is { } refusalReason)
                 {
                     _log.LogError("Registry refusal: {Reason}", refusalReason);
@@ -302,7 +332,7 @@ namespace Tdm.Host
                 // artifact, so signing covers it all at once (W2-D1).
                 manifest.Run.Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath);
 
-                var manifestFile = WriteManifestArtifacts(manifest, reports);
+                var manifestFile = await WriteManifestArtifactsAsync(manifest, reports, ct);
                 if (registry is not null)
                     await registry.FinishAsync(manifest.Run.Outcome.ToString(), manifestFile, ct);
                 RunSummary.Log(_log, manifest);
@@ -344,7 +374,8 @@ namespace Tdm.Host
             return (result.Violations, result.OverrideApplied);
         }
 
-        private string WriteManifestArtifacts(RunManifest manifest, IReadOnlyList<(string Format, string Path)> reports)
+        private async Task<string> WriteManifestArtifactsAsync(RunManifest manifest,
+            IReadOnlyList<(string Format, string Path)> reports, CancellationToken ct)
         {
             var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
             var manifestFile = ManifestWriter.Write(manifest, outputPath);
@@ -354,7 +385,12 @@ namespace Tdm.Host
             _log.LogInformation("Checksum written: {Path}", checksumPath);
             if (_settings.Run.Signing is { } signing)
             {
-                var sigPath = Tdm.Observability.Audit.ManifestSigner.SignFromSettings(manifestFile, signing);
+                // Certificate password via the secret chain (W2-D8) — inline secrets and
+                // registered adapters work as well as plain environment variables.
+                var password = string.IsNullOrEmpty(signing.CertificatePasswordEnv)
+                    ? null
+                    : await _secrets.GetSecretAsync(signing.CertificatePasswordEnv, ct);
+                var sigPath = Tdm.Observability.Audit.ManifestSigner.Sign(manifestFile, signing.CertificatePath, password);
                 _log.LogInformation("Manifest signed: {Path}", sigPath);
             }
 
@@ -364,6 +400,41 @@ namespace Tdm.Host
                 _log.LogInformation("{Format} report written: {Path}", format, written);
             }
             return manifestFile;
+        }
+
+        public async Task<int> ReplayAsync(string manifestPath, CancellationToken ct)
+        {
+            var manifest = ManifestWriter.Read(Path.GetFullPath(manifestPath));
+            var (runtimes, plugins) = await BuildRuntimesAsync(ct);
+            try
+            {
+                var report = await ManifestPlayback.ReplayAsync(manifest, runtimes, _log, ct);
+                foreach (var warning in report.Warnings) _log.LogWarning("{Warning}", warning);
+                foreach (var failure in report.Failures) _log.LogError("{Failure}", failure);
+                return report.ExitCode;
+            }
+            finally
+            {
+                await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
+        public async Task<int> VerifyDriftAsync(string manifestPath, CancellationToken ct)
+        {
+            var manifest = ManifestWriter.Read(Path.GetFullPath(manifestPath));
+            var (runtimes, plugins) = await BuildRuntimesAsync(ct);
+            try
+            {
+                var report = await ManifestPlayback.VerifyAsync(manifest, runtimes, _log, ct);
+                foreach (var warning in report.Warnings) _log.LogWarning("{Warning}", warning);
+                foreach (var drift in report.Drift) _log.LogError("DRIFT: {Drift}", drift);
+                foreach (var error in report.Errors) _log.LogError("{Error}", error);
+                return report.ExitCode;
+            }
+            finally
+            {
+                await DisposeRuntimesAsync(runtimes, plugins);
+            }
         }
 
         public async Task<int> TeardownAsync(string manifestPath, CancellationToken ct)
@@ -574,8 +645,30 @@ namespace Tdm.Host
             }
         }
 
+        /// <summary>Connection strings named via connectionStringName resolve through the
+        /// secret chain (W2-D8): inline (dev) → environment → registered cloud adapter.
+        /// The chain-resolved value is stashed on the domain (never serialized); the built-in
+        /// env-var fallback in ResolveConnectionString still applies when the chain misses.</summary>
+        private async Task ResolveDomainSecretsAsync(CancellationToken ct)
+        {
+            foreach (var domain in _settings.Domains)
+            {
+                if (!string.IsNullOrWhiteSpace(domain.ConnectionString) ||
+                    string.IsNullOrWhiteSpace(domain.ConnectionStringName) ||
+                    domain.ResolvedConnectionString is not null) continue;
+
+                domain.ResolvedConnectionString = await _secrets.GetFirstAsync(
+                [
+                    $"TDM_CONNECTIONSTRINGS__{domain.ConnectionStringName.ToUpperInvariant()}",
+                    $"ConnectionStrings__{domain.ConnectionStringName}",
+                    domain.ConnectionStringName,
+                ], ct);
+            }
+        }
+
         private async Task<(List<IDomainRuntime> Runtimes, List<LoadedPlugin> Plugins)> BuildRuntimesAsync(CancellationToken ct)
         {
+            await ResolveDomainSecretsAsync(ct);
             IPluginAcquirer acquirer = _settings.Plugins.Acquisition == PluginAcquisitionMode.NuGet
                 ? new NuGetPluginAcquirer(_settings.Plugins, _baseDirectory, _log) { UpdatePlugins = _updatePlugins }
                 : new FolderPluginAcquirer(_baseDirectory);

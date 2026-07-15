@@ -43,15 +43,13 @@ internal sealed class RegistrySession : IAsyncDisposable
     /// <summary>Disabled session — registry not configured, or unreachable with Unavailable=Warn.</summary>
     private static readonly RegistrySession Disabled = new((RegistryClient)null!, null!);
 
+    /// <param name="apiKey">Pre-resolved by the caller through the secret chain (W2-D8).</param>
     public static async Task<RegistrySession> StartAsync(TdmSettings settings, string? environmentName,
-        string? runnerId, ILogger log, CancellationToken ct)
+        string? runnerId, string? apiKey, ILogger log, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(settings.Registry.Url)) return Disabled;
 
         var registry = settings.Registry;
-        var apiKey = string.IsNullOrEmpty(registry.ApiKeyEnv)
-            ? null
-            : Environment.GetEnvironmentVariable(registry.ApiKeyEnv);
         var http = new HttpClient
         {
             BaseAddress = new Uri(registry.Url.TrimEnd('/') + "/"),

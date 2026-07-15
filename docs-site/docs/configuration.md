@@ -90,6 +90,20 @@ Per-entity overrides, keyed by logical name:
 | `externalBehavior` | `FkOnly` \| `Projection` (seed a local read-model row for external refs) |
 | `projectionEntity` | Logical name of the projection row seeded in `Projection` mode |
 
+## secrets
+
+```jsonc
+"secrets": {
+  "provider": "Environment",   // default; cloud adapters (AzureKeyVault, …) are host-registered ISecretProviders
+  "inline": { "OrdersDb": "Data Source=./output/orders.db" }   // dev only — tried first
+}
+```
+
+Connection strings (`connectionStringName`), the signing-certificate password, and the
+registry API key all resolve through this chain: inline → environment → adapter. TDM ships
+no cloud SDKs and stores nothing — see
+[secrets-and-playback](https://github.com/chrisw000/test-data-manager/blob/main/docs/secrets-and-playback.md).
+
 ## registry
 
 ```jsonc
@@ -133,6 +147,8 @@ needed, never overridable.
 | `tdm list-entities [--domain X]` | Resolved entity → CLR type, keys, faker, write/read repository |
 | `tdm explain "<step text>" [--keyword When]` | Every pipeline decision for one step; no DB connection |
 | `tdm manifest verify <file> [--cert <public-cert>]` | Check a manifest's checksum and, if present, signature — see [audit-and-signing](https://github.com/chrisw000/test-data-manager/blob/main/docs/audit-and-signing.md) |
+| `tdm replay --manifest <file>` | Re-create exactly the rows a manifest records — final values, not fakers (W2-D9) |
+| `tdm verify --manifest <file>` | Drift check: every recorded row still exists with its recorded values; exit 0/1 |
 
 `--env`, `--policy-file`, `--approval` (on run/validate): environment-policy enforcement —
 see policy as code below.

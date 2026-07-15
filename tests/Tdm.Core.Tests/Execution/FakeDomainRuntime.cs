@@ -114,6 +114,10 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
     public Task<object?> FindByNaturalKeyAsync(EntityDescriptor entity, string naturalKey, CancellationToken ct = default) =>
         Task.FromResult(Rows(entity).FirstOrDefault(row => entity.GetNaturalKey(row) == naturalKey));
 
+    public Task<object?> FindByIdAsync(EntityDescriptor entity, string id, CancellationToken ct = default) =>
+        Task.FromResult(Rows(entity).FirstOrDefault(row =>
+            string.Equals(Convert.ToString(entity.GetKey(row), CultureInfo.InvariantCulture), id, StringComparison.OrdinalIgnoreCase)));
+
     public Task<int> CountAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default) =>
         Task.FromResult(Rows(entity).Count(row => Matches(row, filters)));
 

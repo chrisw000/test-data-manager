@@ -66,6 +66,11 @@ public interface IDomainRuntime : IAsyncDisposable
     Task<int> DeleteWhereAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default);
 
     Task<object?> FindByNaturalKeyAsync(EntityDescriptor entity, string naturalKey, CancellationToken ct = default);
+
+    /// <summary>Finds a row by its (stringified) primary key — manifest playback (W2-D9) locates
+    /// rows by the ids the manifest recorded, exactly as teardown does.</summary>
+    Task<object?> FindByIdAsync(EntityDescriptor entity, string id, CancellationToken ct = default);
+
     Task<int> CountAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default);
 
     /// <summary>

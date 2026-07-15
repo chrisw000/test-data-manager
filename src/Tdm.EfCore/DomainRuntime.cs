@@ -508,6 +508,17 @@ public sealed class DomainRuntime : IDomainRuntime
         };
     }
 
+    public async Task<object?> FindByIdAsync(EntityDescriptor entity, string id, CancellationToken ct = default)
+    {
+        var binding = BindingFor(entity);
+        if (entity.KeyProperty is null)
+            throw new InvalidOperationException($"Entity '{entity.LogicalName}' has no single-column key.");
+        if (!ValueConverter.TryConvert(id, entity.KeyProperty.PropertyType, out var keyValue, out var error))
+            throw new InvalidOperationException(error);
+        var ctx = ContextFor(binding);
+        return await ctx.FindAsync(entity.ClrType, [keyValue], ct).ConfigureAwait(false);
+    }
+
     public async Task<int> CountAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default)
     {
         var ctx = ContextFor(BindingFor(entity));

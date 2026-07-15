@@ -21,6 +21,7 @@ public sealed class TdmSettings
     public RunSettings Run { get; set; } = new();
     public PluginsSettings Plugins { get; set; } = new();
     public RegistrySettings Registry { get; set; } = new();
+    public SecretsSettings Secrets { get; set; } = new();
     public List<DomainSettings> Domains { get; set; } = [];
     public Dictionary<string, ConventionProfile> ConventionProfiles { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
@@ -80,6 +81,24 @@ public sealed class RunSettings
     /// <summary>Optional detached-signature manifest signing (W2-D2). A SHA-256 checksum is
     /// always written next to the manifest regardless of whether this is configured.</summary>
     public SigningSettings? Signing { get; set; }
+}
+
+/// <summary>
+/// Secret resolution (W2-D8): inline (dev only, when configured) → environment → optionally
+/// a named cloud provider. Used for connection strings, the manifest-signing certificate
+/// password, and registry auth. TDM never stores secrets and ships no cloud SDKs — cloud
+/// adapters implement Tdm.Core.Secrets.ISecretProvider (see docs/secrets-and-playback.md).
+/// </summary>
+public sealed class SecretsSettings
+{
+    /// <summary>"Environment" (default, shipped) or the name of a host-registered
+    /// ISecretProvider (e.g. "AzureKeyVault", "AwsSecretsManager").</summary>
+    public string Provider { get; set; } = "Environment";
+    /// <summary>Adapter endpoint (e.g. a Key Vault URI) — passed through to the adapter; unused by the shipped providers.</summary>
+    public string? VaultUri { get; set; }
+    /// <summary>Development-only inline secrets, tried first. Environment policy can ban
+    /// inline connection-string sources for shared environments.</summary>
+    public Dictionary<string, string> Inline { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public enum RegistryUnavailableBehavior { Warn, Fail }
@@ -147,8 +166,13 @@ public sealed class DomainSettings
     public string Provider { get; set; } = "Sqlite";
     /// <summary>Inline connection string; wins over <see cref="ConnectionStringName"/>.</summary>
     public string? ConnectionString { get; set; }
-    /// <summary>Name resolved from environment: TDM_CONNECTIONSTRINGS__{NAME} or ConnectionStrings__{NAME}.</summary>
+    /// <summary>Name resolved through the secret chain (W2-D8) — candidates tried:
+    /// TDM_CONNECTIONSTRINGS__{NAME}, ConnectionStrings__{Name}, then the bare name.</summary>
     public string? ConnectionStringName { get; set; }
+    /// <summary>Set by the host after secret-chain resolution of <see cref="ConnectionStringName"/>;
+    /// never serialized. Wins over the built-in environment-variable fallback.</summary>
+    [JsonIgnore]
+    public string? ResolvedConnectionString { get; set; }
     public string ConventionProfile { get; set; } = "modern";
     public PersistenceMode Persistence { get; set; } = PersistenceMode.RepositoryFirst;
     public ExternalReferenceMode ExternalReferences { get; set; } = ExternalReferenceMode.Synthesize;
@@ -160,6 +184,7 @@ public sealed class DomainSettings
     public string ResolveConnectionString()
     {
         if (!string.IsNullOrWhiteSpace(ConnectionString)) return ConnectionString;
+        if (!string.IsNullOrWhiteSpace(ResolvedConnectionString)) return ResolvedConnectionString;
         if (!string.IsNullOrWhiteSpace(ConnectionStringName))
         {
             var value = Environment.GetEnvironmentVariable($"TDM_CONNECTIONSTRINGS__{ConnectionStringName.ToUpperInvariant()}")
