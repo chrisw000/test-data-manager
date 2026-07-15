@@ -59,6 +59,9 @@ public sealed class RunInfo
     /// <summary>True when environment-policy violations were present but bypassed via a
     /// validated --approval token (W2-D4). Key-registry violations are never overridable.</summary>
     public bool PolicyOverrideApplied { get; set; }
+    /// <summary>Run id assigned by the run registry (W2-D7), when registry.url is configured —
+    /// the manifest links back to the registry entry that links to it.</summary>
+    public string? RegistryRunId { get; set; }
 }
 
 /// <summary>One policy or key-registry violation (W2-D3/W2-D6), structured for the SARIF emitter.</summary>

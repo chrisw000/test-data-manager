@@ -90,6 +90,23 @@ Per-entity overrides, keyed by logical name:
 | `externalBehavior` | `FkOnly` \| `Projection` (seed a local read-model row for external refs) |
 | `projectionEntity` | Logical name of the projection row seeded in `Projection` mode |
 
+## registry
+
+```jsonc
+"registry": {
+  "url": "https://tdm-registry.internal",  // enables run tracking + environment locks (W2-D7)
+  "apiKeyEnv": "TDM_REGISTRY_APIKEY",      // env var holding the key; unset = anonymous
+  "unavailable": "Warn",                   // Warn: continue without locks | Fail: refuse (exit 2)
+  "lockTtlSeconds": 60,
+  "heartbeatSeconds": 20
+}
+```
+
+When set, `tdm run` registers the run and leases every domain's target database before
+seeding — two runs targeting the same database collide, and the second fails fast naming the
+holder. See
+[run-registry-and-locks](https://github.com/chrisw000/test-data-manager/blob/main/docs/run-registry-and-locks.md).
+
 ## Policy as code and the key registry
 
 Opt-in, CLI-driven (not part of `tdm.settings.json`) — see

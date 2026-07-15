@@ -20,6 +20,7 @@ public sealed class TdmSettings
 {
     public RunSettings Run { get; set; } = new();
     public PluginsSettings Plugins { get; set; } = new();
+    public RegistrySettings Registry { get; set; } = new();
     public List<DomainSettings> Domains { get; set; } = [];
     public Dictionary<string, ConventionProfile> ConventionProfiles { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
@@ -79,6 +80,25 @@ public sealed class RunSettings
     /// <summary>Optional detached-signature manifest signing (W2-D2). A SHA-256 checksum is
     /// always written next to the manifest regardless of whether this is configured.</summary>
     public SigningSettings? Signing { get; set; }
+}
+
+public enum RegistryUnavailableBehavior { Warn, Fail }
+
+/// <summary>
+/// Run-registry integration (W2-D7). When <see cref="Url"/> is set, `tdm run` registers the
+/// run and acquires a lease on every domain's (environment, domain, database) before seeding,
+/// heartbeating during. A lock conflict always fails fast naming the holder; an unreachable
+/// registry degrades per <see cref="Unavailable"/>.
+/// </summary>
+public sealed class RegistrySettings
+{
+    public string? Url { get; set; }
+    /// <summary>Name of the environment variable holding the API key sent as X-Tdm-ApiKey; unset = anonymous.</summary>
+    public string? ApiKeyEnv { get; set; }
+    /// <summary>Warn: log and continue without registry/locks. Fail: refuse to run (exit 2).</summary>
+    public RegistryUnavailableBehavior Unavailable { get; set; } = RegistryUnavailableBehavior.Warn;
+    public int LockTtlSeconds { get; set; } = 60;
+    public int HeartbeatSeconds { get; set; } = 20;
 }
 
 public sealed class SigningSettings

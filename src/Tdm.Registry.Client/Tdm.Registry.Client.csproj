@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>TDM run-registry client (W2-D7): run start/finish tracking and (environment, domain, database) lease locks against a Tdm.Registry service. Contracts shared with the service.</Description>
+  </PropertyGroup>
+
+</Project>

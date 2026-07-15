@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- Ships as a container image (see Dockerfile.registry), not a NuGet package. -->
+    <IsPackable>false</IsPackable>
+    <Description>TDM run registry (W2-D7): a thin lease + index service — run start/finish tracking and (environment, domain, database) locks with TTL + heartbeat. Links to manifests; never duplicates them.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- Same CVE pin as Tdm.EfCore (GHSA-2m69-gcr7-jv3q). -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tdm.Registry.Client\Tdm.Registry.Client.csproj" />
+  </ItemGroup>
+
+</Project>

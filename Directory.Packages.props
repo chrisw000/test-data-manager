@@ -37,6 +37,9 @@
     <!-- AwesomeAssertions: Apache-2.0 fork of FluentAssertions (FluentAssertions-style API; 9.x uses the AwesomeAssertions namespace). -->
     <PackageVersion Include="AwesomeAssertions" Version="9.4.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <!-- Tdm.Registry service tests: in-proc host + fake clock for TTL expiry. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageVersion Include="Reqnroll.xunit.v3" Version="3.3.4" />

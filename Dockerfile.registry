@@ -1,0 +1,19 @@
+# Tdm.Registry container image (W2-D7) — the run registry + environment-lock service.
+# Build:  docker build -f Dockerfile.registry -t tdm-registry:local .
+# Usage:  docker run --rm -p 8080:8080 -v tdm-registry-data:/data \
+#           -e TDM_REGISTRY_DB=/data/tdm-registry.db \
+#           -e TDM_REGISTRY_APIKEY=change-me tdm-registry:local
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG TDM_VERSION=0.1.0
+WORKDIR /source
+COPY Directory.Build.props Directory.Packages.props ./
+COPY src/ src/
+RUN dotnet publish src/Tdm.Registry/Tdm.Registry.csproj -c Release -o /app -p:TdmVersion=${TDM_VERSION}
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+COPY --from=build /app .
+ENV TDM_REGISTRY_DB=/data/tdm-registry.db
+VOLUME /data
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "/app/Tdm.Registry.dll"]

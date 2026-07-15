@@ -268,9 +268,23 @@ namespace Tdm.Host
                         policyViolations.Count, _environmentName);
                 }
 
+                // Run registry + environment locks (W2-D7): registered and leased before any
+                // seeding, released on dispose. Validate never touches data, so no locks.
+                await using var registry = dryRun
+                    ? null
+                    : await RegistrySession.StartAsync(_settings, _environmentName,
+                        Tdm.Observability.Audit.AttributionCollector.DetectRunnerId(
+                            Environment.GetEnvironmentVariable, Environment.UserName), _log, ct);
+                if (registry?.RefusalReason is { } refusalReason)
+                {
+                    _log.LogError("Registry refusal: {Reason}", refusalReason);
+                    return 2;
+                }
+
                 var engine = new TdmEngine(_settings, runtimes, _loggerFactory.CreateLogger<TdmEngine>());
                 var manifest = await engine.RunAsync(plan, dryRun, ct);
                 manifest.Run.Environment = _environmentName;
+                manifest.Run.RegistryRunId = registry?.RunId?.ToString();
                 manifest.Run.PolicyOverrideApplied = overrideApplied;
                 if (overrideApplied)
                 {
@@ -288,7 +302,9 @@ namespace Tdm.Host
                 // artifact, so signing covers it all at once (W2-D1).
                 manifest.Run.Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath);
 
-                WriteManifestArtifacts(manifest, reports);
+                var manifestFile = WriteManifestArtifacts(manifest, reports);
+                if (registry is not null)
+                    await registry.FinishAsync(manifest.Run.Outcome.ToString(), manifestFile, ct);
                 RunSummary.Log(_log, manifest);
                 return manifest.ExitCode;
             }
@@ -328,7 +344,7 @@ namespace Tdm.Host
             return (result.Violations, result.OverrideApplied);
         }
 
-        private void WriteManifestArtifacts(RunManifest manifest, IReadOnlyList<(string Format, string Path)> reports)
+        private string WriteManifestArtifacts(RunManifest manifest, IReadOnlyList<(string Format, string Path)> reports)
         {
             var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
             var manifestFile = ManifestWriter.Write(manifest, outputPath);
@@ -347,6 +363,7 @@ namespace Tdm.Host
                 var written = Tdm.Observability.Reports.ReportEmitter.Write(manifest, format, path, _baseDirectory);
                 _log.LogInformation("{Format} report written: {Path}", format, written);
             }
+            return manifestFile;
         }
 
         public async Task<int> TeardownAsync(string manifestPath, CancellationToken ct)

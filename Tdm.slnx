@@ -7,6 +7,8 @@
     <Project Path="src/Tdm.Observability/Tdm.Observability.csproj" />
     <Project Path="src/Tdm.Plugins/Tdm.Plugins.csproj" />
     <Project Path="src/Tdm.Policy/Tdm.Policy.csproj" />
+    <Project Path="src/Tdm.Registry.Client/Tdm.Registry.Client.csproj" />
+    <Project Path="src/Tdm.Registry/Tdm.Registry.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Acme.Billing.Data.Infrastructure/Acme.Billing.Data.Infrastructure.csproj" />
@@ -17,5 +19,6 @@
     <Project Path="tests/Tdm.Observability.Tests/Tdm.Observability.Tests.csproj" />
     <Project Path="tests/Tdm.Plugins.Tests/Tdm.Plugins.Tests.csproj" />
     <Project Path="tests/Tdm.Policy.Tests/Tdm.Policy.Tests.csproj" />
+    <Project Path="tests/Tdm.Registry.Tests/Tdm.Registry.Tests.csproj" />
   </Folder>
 </Solution>

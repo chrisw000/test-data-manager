@@ -43,13 +43,17 @@ jobs:
           --api-key "${{ secrets.GITHUB_TOKEN }}"
           --skip-duplicate
 
-      - name: Build and push container image
+      - name: Build and push container images
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           IMAGE="ghcr.io/${{ github.repository_owner }}/tdm"
           docker build -t "$IMAGE:${TDM_VERSION}" -t "$IMAGE:latest" --build-arg TDM_VERSION=${TDM_VERSION} .
           docker push "$IMAGE:${TDM_VERSION}"
           docker push "$IMAGE:latest"
+          REGISTRY_IMAGE="ghcr.io/${{ github.repository_owner }}/tdm-registry"
+          docker build -f Dockerfile.registry -t "$REGISTRY_IMAGE:${TDM_VERSION}" -t "$REGISTRY_IMAGE:latest" --build-arg TDM_VERSION=${TDM_VERSION} .
+          docker push "$REGISTRY_IMAGE:${TDM_VERSION}"
+          docker push "$REGISTRY_IMAGE:latest"
 
       - name: Create GitHub Release with package artifacts
         env:

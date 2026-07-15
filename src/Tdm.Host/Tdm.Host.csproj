@@ -24,6 +24,7 @@
     <ProjectReference Include="..\Tdm.Plugins\Tdm.Plugins.csproj" />
     <ProjectReference Include="..\Tdm.Observability\Tdm.Observability.csproj" />
     <ProjectReference Include="..\Tdm.Policy\Tdm.Policy.csproj" />
+    <ProjectReference Include="..\Tdm.Registry.Client\Tdm.Registry.Client.csproj" />
   </ItemGroup>
 
 </Project>
