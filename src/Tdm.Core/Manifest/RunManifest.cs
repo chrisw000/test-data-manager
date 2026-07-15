@@ -51,6 +51,22 @@ public sealed class RunInfo
     /// <summary>Synthetic-data attestation (W2-D1): classifies every generator source used in
     /// the run. All sources are synthetic by construction in v1.</summary>
     public AttestationInfo Attestation { get; set; } = new();
+    /// <summary>Target environment name from --env (W2-D3), if given.</summary>
+    public string? Environment { get; set; }
+    /// <summary>Policy (tdm.policy.json) and key-registry (tdm.keys.json) violations found
+    /// before persistence. Non-empty and not overridden → the run refuses to start (exit 2).</summary>
+    public List<PolicyViolationInfo> PolicyViolations { get; set; } = [];
+    /// <summary>True when environment-policy violations were present but bypassed via a
+    /// validated --approval token (W2-D4). Key-registry violations are never overridable.</summary>
+    public bool PolicyOverrideApplied { get; set; }
+}
+
+/// <summary>One policy or key-registry violation (W2-D3/W2-D6), structured for the SARIF emitter.</summary>
+public sealed class PolicyViolationInfo
+{
+    /// <summary>Rule identifier, e.g. "AllowedLifecycles", "MaxBulkRowsPerStep", "KeyRegistry".</summary>
+    public string Rule { get; set; } = "";
+    public string Message { get; set; } = "";
 }
 
 /// <summary>Runner identity, git state and config hash captured at manifest-build time (W2-D1).

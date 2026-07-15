@@ -9,7 +9,8 @@ namespace Tdm.Observability.Reports;
 /// manifest stays the single source of truth. Every warning, unmatched step and failed
 /// scenario becomes a result anchored to the feature file and line, so the standard SARIF
 /// upload actions render them as inline PR annotations.
-/// Rules: TDM0001 unmatched step · TDM0002 warning · TDM0003 scenario failed.
+/// Rules: TDM0001 unmatched step · TDM0002 warning · TDM0003 scenario failed ·
+/// TDM0004 policy/key-registry violation (W2-D3/W2-D6).
 /// </summary>
 public static class SarifReport
 {
@@ -23,6 +24,14 @@ public static class SarifReport
     public static string Render(RunManifest manifest, string? baseDirectory = null)
     {
         var results = new List<object>();
+
+        // Policy/key-registry violations are run-level (found before any scenario executes),
+        // so they carry no feature-file location.
+        foreach (var violation in manifest.Run.PolicyViolations)
+        {
+            results.Add(Result("TDM0004", "error", $"[{violation.Rule}] {violation.Message}", uri: "", line: 0));
+        }
+
         foreach (var scenario in manifest.Scenarios)
         {
             var uri = RelativeUri(scenario.FeatureFile, baseDirectory);
@@ -66,6 +75,7 @@ public static class SarifReport
                                 Rule("TDM0001", "Unmatched step", "A feature step matched no TDM grammar rule."),
                                 Rule("TDM0002", "Run warning", "A warning was raised while executing a scenario."),
                                 Rule("TDM0003", "Scenario failed", "A scenario failed under the active failure policy."),
+                                Rule("TDM0004", "Policy violation", "A policy (tdm.policy.json) or key-registry (tdm.keys.json) rule was violated before persistence."),
                             },
                         },
                     },

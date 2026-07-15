@@ -29,12 +29,26 @@ var reportOption = new Option<string[]>("--report")
     Description = "Additionally emit the manifest as <format>=<path>; formats: sarif, junit. Repeatable.",
     Arity = ArgumentArity.ZeroOrMore,
 };
+var envOption = new Option<string?>("--env")
+{
+    Description = "Target environment name — enables tdm.policy.json enforcement for this run (W2-D3).",
+};
+var policyFileOption = new Option<string>("--policy-file")
+{
+    Description = "Path to tdm.policy.json (only read when --env is given)",
+    DefaultValueFactory = _ => "tdm.policy.json",
+};
+var approvalOption = new Option<string?>("--approval")
+{
+    Description = "Approval token to override environment-policy violations (W2-D4); validated against the environment's configured secret.",
+};
 
 var root = new RootCommand("TDM — Gherkin-driven Test Data Manager");
 
 var runCommand = new Command("run", "Parse feature files, seed data, write the run manifest.")
 {
     settingsOption, seedOption, policyOption, lifecycleOption, benchmarkOption, updatePluginsOption, reportOption,
+    envOption, policyFileOption, approvalOption,
 };
 runCommand.SetAction(async (parseResult, ct) =>
 {
@@ -42,20 +56,23 @@ runCommand.SetAction(async (parseResult, ct) =>
     var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!,
         parseResult.GetValue(seedOption), parseResult.GetValue(policyOption),
         parseResult.GetValue(lifecycleOption), parseResult.GetValue(benchmarkOption),
-        parseResult.GetValue(updatePluginsOption));
+        parseResult.GetValue(updatePluginsOption), parseResult.GetValue(envOption),
+        parseResult.GetValue(policyFileOption)!, parseResult.GetValue(approvalOption));
     return await composer.RunAsync(dryRun: false, reports, ct);
 });
 
 var validateCommand = new Command("validate", "Parse features and resolve entities/fakers/repositories; persist nothing (CI dry run).")
 {
     settingsOption, policyOption, updatePluginsOption, reportOption,
+    envOption, policyFileOption, approvalOption,
 };
 validateCommand.SetAction(async (parseResult, ct) =>
 {
     var reports = ParseReports(parseResult.GetValue(reportOption));
     var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!,
         seed: null, parseResult.GetValue(policyOption), lifecycle: null, benchmark: null,
-        parseResult.GetValue(updatePluginsOption));
+        parseResult.GetValue(updatePluginsOption), parseResult.GetValue(envOption),
+        parseResult.GetValue(policyFileOption)!, parseResult.GetValue(approvalOption));
     return await composer.RunAsync(dryRun: true, reports, ct);
 });
 
@@ -153,15 +170,22 @@ namespace Tdm.Host
         private readonly string _settingsFilePath;
         private readonly string _baseDirectory;
         private readonly bool _updatePlugins;
+        private readonly string? _environmentName;
+        private readonly string _policyFilePath;
+        private readonly string? _approvalToken;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _log;
 
-        private HostComposer(TdmSettings settings, string settingsFilePath, string baseDirectory, bool updatePlugins)
+        private HostComposer(TdmSettings settings, string settingsFilePath, string baseDirectory, bool updatePlugins,
+            string? environmentName, string policyFilePath, string? approvalToken)
         {
             _settings = settings;
             _settingsFilePath = settingsFilePath;
             _baseDirectory = baseDirectory;
             _updatePlugins = updatePlugins;
+            _environmentName = environmentName;
+            _policyFilePath = policyFilePath;
+            _approvalToken = approvalToken;
             _loggerFactory = LoggerFactory.Create(builder => builder
                 .AddSimpleConsole(o =>
                 {
@@ -173,7 +197,8 @@ namespace Tdm.Host
         }
 
         public static HostComposer Create(string settingsPath, int? seed, FailurePolicy? policy,
-            LifecycleMode? lifecycle, bool? benchmark, bool updatePlugins = false)
+            LifecycleMode? lifecycle, bool? benchmark, bool updatePlugins = false,
+            string? environmentName = null, string policyFilePath = "tdm.policy.json", string? approvalToken = null)
         {
             var fullPath = Path.GetFullPath(settingsPath);
             var settings = TdmSettings.Load(fullPath);
@@ -181,7 +206,8 @@ namespace Tdm.Host
             if (policy is { } p) settings.Run.FailurePolicy = p;
             if (lifecycle is { } l) settings.Run.Lifecycle = l;
             if (benchmark is { } b) settings.Run.Benchmark = b;
-            return new HostComposer(settings, fullPath, Path.GetDirectoryName(fullPath)!, updatePlugins);
+            return new HostComposer(settings, fullPath, Path.GetDirectoryName(fullPath)!, updatePlugins,
+                environmentName, policyFilePath, approvalToken);
         }
 
         public async Task<int> RunAsync(bool dryRun, CancellationToken ct) =>
@@ -210,8 +236,48 @@ namespace Tdm.Host
                 _log.LogInformation("{Mode} {Features} feature file(s), {Scenarios} scenario(s)",
                     dryRun ? "Validating" : "Running", plan.Features.Count, totalScenarios);
 
+                // Everything below is statically known from the parsed plan — checked before
+                // any execution/persistence (W2-D3, W2-D6).
+                var (policyViolations, overrideApplied) = EvaluatePrePersistencePolicy(plan, plugins);
+                if (policyViolations.Count > 0 && !overrideApplied)
+                {
+                    foreach (var violation in policyViolations)
+                        _log.LogError("Policy violation [{Rule}]: {Message}", violation.Rule, violation.Message);
+                    _log.LogError("{Count} policy violation(s) — refusing to {Mode}.",
+                        policyViolations.Count, dryRun ? "validate" : "run");
+
+                    var refusal = new RunManifest
+                    {
+                        Run = new RunInfo
+                        {
+                            Name = _settings.Run.Name,
+                            StartedUtc = DateTime.UtcNow,
+                            Outcome = RunOutcome.Failed,
+                            DryRun = dryRun,
+                            Environment = _environmentName,
+                            PolicyViolations = [.. policyViolations.Select(v => new PolicyViolationInfo { Rule = v.Rule, Message = v.Message })],
+                            Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath),
+                        },
+                    };
+                    WriteManifestArtifacts(refusal, reports);
+                    return refusal.ExitCode;
+                }
+                if (overrideApplied)
+                {
+                    _log.LogWarning("{Count} environment policy violation(s) for '{Env}' overridden via --approval.",
+                        policyViolations.Count, _environmentName);
+                }
+
                 var engine = new TdmEngine(_settings, runtimes, _loggerFactory.CreateLogger<TdmEngine>());
                 var manifest = await engine.RunAsync(plan, dryRun, ct);
+                manifest.Run.Environment = _environmentName;
+                manifest.Run.PolicyOverrideApplied = overrideApplied;
+                if (overrideApplied)
+                {
+                    // The override event is recorded, not just its flag — an audit trail
+                    // needs to show what was bypassed, not only that something was (W2-D4).
+                    manifest.Run.PolicyViolations = [.. policyViolations.Select(v => new PolicyViolationInfo { Rule = v.Rule, Message = v.Message })];
+                }
 
                 // Reproducibility down to the plugin version (W1-D2).
                 foreach (var plugin in plugins)
@@ -222,30 +288,64 @@ namespace Tdm.Host
                 // artifact, so signing covers it all at once (W2-D1).
                 manifest.Run.Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath);
 
-                var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
-                var manifestFile = ManifestWriter.Write(manifest, outputPath);
-                _log.LogInformation("Manifest written: {Path}", manifestFile);
-
-                var checksumPath = Tdm.Observability.Audit.ManifestSigner.WriteChecksum(manifestFile);
-                _log.LogInformation("Checksum written: {Path}", checksumPath);
-                if (_settings.Run.Signing is { } signing)
-                {
-                    var sigPath = Tdm.Observability.Audit.ManifestSigner.SignFromSettings(manifestFile, signing);
-                    _log.LogInformation("Manifest signed: {Path}", sigPath);
-                }
-
-                foreach (var (format, path) in reports)
-                {
-                    var written = Tdm.Observability.Reports.ReportEmitter.Write(manifest, format, path, _baseDirectory);
-                    _log.LogInformation("{Format} report written: {Path}", format, written);
-                }
-
+                WriteManifestArtifacts(manifest, reports);
                 RunSummary.Log(_log, manifest);
                 return manifest.ExitCode;
             }
             finally
             {
                 await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
+        /// <summary>
+        /// Key-registry checks (W2-D6) always run when a referenced domain has published
+        /// tdm.keys.json — independent of --env. Environment-policy checks (W2-D3) only run
+        /// when --env is given, against tdm.policy.json (--policy-file). Key-registry
+        /// violations are never overridable; environment-policy violations are, via a
+        /// validated --approval token (W2-D4).
+        /// </summary>
+        private (List<Tdm.Policy.PolicyViolation> Violations, bool OverrideApplied) EvaluatePrePersistencePolicy(
+            SeedingPlan plan, List<LoadedPlugin> plugins)
+        {
+            var registries = plugins.Where(p => p.KeyRegistry is not null)
+                .ToDictionary(p => p.DomainName, p => p.KeyRegistry!, StringComparer.OrdinalIgnoreCase);
+            var violations = Tdm.Policy.KeyRegistryChecker.Check(plan, registries);
+            if (violations.Count > 0) return (violations, false); // never overridable
+
+            if (_environmentName is null) return (violations, false);
+
+            var policyPath = Path.GetFullPath(_policyFilePath, _baseDirectory);
+            if (!File.Exists(policyPath))
+            {
+                throw new InvalidOperationException(
+                    $"--env '{_environmentName}' was given but no policy file was found at '{policyPath}'. " +
+                    "Create tdm.policy.json or pass --policy-file.");
+            }
+            var policy = Tdm.Policy.PolicyDocument.Load(policyPath);
+            var result = Tdm.Policy.PolicyEvaluator.Evaluate(policy, _environmentName, plan, _settings,
+                _approvalToken, Environment.GetEnvironmentVariable);
+            return (result.Violations, result.OverrideApplied);
+        }
+
+        private void WriteManifestArtifacts(RunManifest manifest, IReadOnlyList<(string Format, string Path)> reports)
+        {
+            var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
+            var manifestFile = ManifestWriter.Write(manifest, outputPath);
+            _log.LogInformation("Manifest written: {Path}", manifestFile);
+
+            var checksumPath = Tdm.Observability.Audit.ManifestSigner.WriteChecksum(manifestFile);
+            _log.LogInformation("Checksum written: {Path}", checksumPath);
+            if (_settings.Run.Signing is { } signing)
+            {
+                var sigPath = Tdm.Observability.Audit.ManifestSigner.SignFromSettings(manifestFile, signing);
+                _log.LogInformation("Manifest signed: {Path}", sigPath);
+            }
+
+            foreach (var (format, path) in reports)
+            {
+                var written = Tdm.Observability.Reports.ReportEmitter.Write(manifest, format, path, _baseDirectory);
+                _log.LogInformation("{Format} report written: {Path}", format, written);
             }
         }
 

@@ -23,6 +23,7 @@
     <ProjectReference Include="..\Tdm.EfCore\Tdm.EfCore.csproj" />
     <ProjectReference Include="..\Tdm.Plugins\Tdm.Plugins.csproj" />
     <ProjectReference Include="..\Tdm.Observability\Tdm.Observability.csproj" />
+    <ProjectReference Include="..\Tdm.Policy\Tdm.Policy.csproj" />
   </ItemGroup>
 
 </Project>

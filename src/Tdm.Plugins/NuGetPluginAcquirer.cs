@@ -220,7 +220,11 @@ public sealed class NuGetPluginAcquirer(PluginsSettings plugins, string? baseDir
 
             foreach (var item in libGroups.First(g => Equals(g.TargetFramework, nearest)).Items)
             {
-                if (!item.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                // The natural-key registry (W2-D6) ships alongside the domain's lib output.
+                var isKeyRegistry = string.Equals(Path.GetFileName(item),
+                    Tdm.Core.Registry.KeyRegistryDocument.FileName, StringComparison.OrdinalIgnoreCase);
+                if (!isKeyRegistry &&
+                    !item.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
                     !item.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)) continue;
                 var target = Path.Combine(folder, Path.GetFileName(item));
                 using var source = reader.GetStream(item);

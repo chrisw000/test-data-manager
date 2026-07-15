@@ -1,0 +1,18 @@
+{
+  // Orders' natural-key registry (W2-D6): the natural keys this domain agrees to keep
+  // stable for cross-domain identity references (e.g. "an external Customer reference ...
+  // from Orders"). Ships inside the package so it versions and reviews alongside the code.
+  "registryVersion": 1,
+  "domain": "Orders",
+  "entities": {
+    "Customer": {
+      "naturalKey": "Name",
+      "keys": ["Acme Ltd", "Globex Corp", "Initech Ltd"]
+    },
+    "Product": {
+      "naturalKey": "Sku",
+      "keys": [],
+      "keyPattern": "^[A-Z]{3}-\\d{4}$"
+    }
+  }
+}

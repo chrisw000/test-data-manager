@@ -22,6 +22,7 @@ public class ReportGoldenTests
             TdmVersion = "0.1.0+abc1234",
             DurationMs = 1234.5,
             Outcome = RunOutcome.CompletedWithWarnings,
+            PolicyViolations = [new PolicyViolationInfo { Rule = "MaxBulkRowsPerStep", Message = "creates 500 row(s) of 'Product', exceeding the max of 100." }],
         },
         Scenarios =
         [
@@ -104,11 +105,25 @@ public class ReportGoldenTests
                           "shortDescription": {
                             "text": "A scenario failed under the active failure policy."
                           }
+                        },
+                        {
+                          "id": "TDM0004",
+                          "name": "Policyviolation",
+                          "shortDescription": {
+                            "text": "A policy (tdm.policy.json) or key-registry (tdm.keys.json) rule was violated before persistence."
+                          }
                         }
                       ]
                     }
                   },
                   "results": [
+                    {
+                      "ruleId": "TDM0004",
+                      "level": "error",
+                      "message": {
+                        "text": "[MaxBulkRowsPerStep] creates 500 row(s) of 'Product', exceeding the max of 100."
+                      }
+                    },
                     {
                       "ruleId": "TDM0001",
                       "level": "warning",

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>TDM policy as code: environment-scoped tdm.policy.json enforcement and the cross-domain natural-key registry (tdm.keys.json), evaluated before any persistence.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tdm.Core\Tdm.Core.csproj" />
+  </ItemGroup>
+
+</Project>

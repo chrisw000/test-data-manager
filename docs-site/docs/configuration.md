@@ -90,6 +90,21 @@ Per-entity overrides, keyed by logical name:
 | `externalBehavior` | `FkOnly` \| `Projection` (seed a local read-model row for external refs) |
 | `projectionEntity` | Logical name of the projection row seeded in `Projection` mode |
 
+## Policy as code and the key registry
+
+Opt-in, CLI-driven (not part of `tdm.settings.json`) — see
+[policy-and-key-registry](https://github.com/chrisw000/test-data-manager/blob/main/docs/policy-and-key-registry.md)
+for the full rule set:
+
+```bash
+tdm validate --env shared-dev --policy-file tdm.policy.json
+tdm run --env shared-dev --approval "$TOKEN"   # bypasses violations if the environment allows it
+```
+
+The natural-key registry (`tdm.keys.json`, shipped inside a domain's plugin output) checks
+every external reference against the owning domain's declared keys — always on, no `--env`
+needed, never overridable.
+
 ## CLI
 
 | Command | Purpose |
@@ -101,6 +116,9 @@ Per-entity overrides, keyed by logical name:
 | `tdm list-entities [--domain X]` | Resolved entity → CLR type, keys, faker, write/read repository |
 | `tdm explain "<step text>" [--keyword When]` | Every pipeline decision for one step; no DB connection |
 | `tdm manifest verify <file> [--cert <public-cert>]` | Check a manifest's checksum and, if present, signature — see [audit-and-signing](https://github.com/chrisw000/test-data-manager/blob/main/docs/audit-and-signing.md) |
+
+`--env`, `--policy-file`, `--approval` (on run/validate): environment-policy enforcement —
+see policy as code below.
 
 `--report <format>=<path>` (repeatable, on run/validate): `sarif` for PR annotations,
 `junit` for CI test UIs. A composite GitHub Action wrapping all of this ships in-repo at

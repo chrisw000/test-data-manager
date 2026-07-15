@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
+using Tdm.Core.Registry;
 using Tdm.Core.Settings;
 
 namespace Tdm.Plugins;
@@ -9,7 +10,9 @@ public sealed record LoadedPlugin(
     PluginLoadContext LoadContext,
     IReadOnlyList<Assembly> Assemblies,
     /// <summary>Resolved package versions (packageId → version) when a feed acquirer ran; empty for folder acquisition.</summary>
-    IReadOnlyDictionary<string, string> Packages);
+    IReadOnlyDictionary<string, string> Packages,
+    /// <summary>The domain's published natural-key registry (W2-D6), or null if it hasn't published one.</summary>
+    KeyRegistryDocument? KeyRegistry);
 
 /// <summary>
 /// Loads a domain's plugin folder into an isolated <see cref="PluginLoadContext"/> and
@@ -45,7 +48,8 @@ public sealed class PluginLoader(IPluginAcquirer acquirer, ILogger? logger = nul
         ValidateEfVersion(domain, assemblies);
         logger?.LogInformation("Domain {Domain}: loaded {Count} plugin assembl{Suffix} from {Folder}",
             domain.Name, assemblies.Count, assemblies.Count == 1 ? "y" : "ies", folder);
-        return new LoadedPlugin(domain.Name, context, assemblies, acquired.Packages);
+        var keyRegistry = KeyRegistryDocument.TryLoad(folder);
+        return new LoadedPlugin(domain.Name, context, assemblies, acquired.Packages, keyRegistry);
     }
 
     private static void ValidateEfVersion(DomainSettings domain, IReadOnlyList<Assembly> assemblies)

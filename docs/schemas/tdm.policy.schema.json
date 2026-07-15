@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chrisw000/test-data-manager/blob/main/docs/schemas/tdm.policy.schema.json",
+  "title": "TDM environment policy (W2-D3)",
+  "description": "tdm.policy.json — environment-scoped rules evaluated by `tdm validate`/`tdm run --env` before any persistence.",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "policyVersion": { "type": "integer", "const": 1 },
+    "environments": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/environmentPolicy" }
+    }
+  },
+  "required": ["environments"],
+  "$defs": {
+    "environmentPolicy": {
+      "type": "object",
+      "properties": {
+        "allowedLifecycles": {
+          "type": "array",
+          "items": { "enum": ["Persistent", "Transactional", "TrackedTeardown"] }
+        },
+        "requireFailurePolicyAtLeast": { "enum": ["BestEffort", "FailObject", "FailRun"] },
+        "maxBulkRowsPerStep": { "type": "integer", "minimum": 1 },
+        "maxCreatedRowsPerRun": { "type": "integer", "minimum": 1 },
+        "connectionStringSources": {
+          "type": "array",
+          "items": { "enum": ["inline", "env"] }
+        },
+        "bannedEntities": { "type": "array", "items": { "type": "string" } },
+        "requiredTags": { "type": "array", "items": { "type": "string" } },
+        "override": {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "approvalToken" },
+            "tokenEnv": { "type": "string", "description": "Environment variable holding the token --approval must match." }
+          },
+          "required": ["kind", "tokenEnv"]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
