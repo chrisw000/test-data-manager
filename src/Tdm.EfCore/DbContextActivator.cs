@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Tdm.Core.Settings;
+using Tdm.EfCore.Providers;
 
 namespace Tdm.EfCore;
 
@@ -48,30 +49,9 @@ public static class DbContextActivator
 
     public static void ApplyProvider(DbContextOptionsBuilder builder, DomainSettings domain)
     {
-        var connectionString = domain.ResolveConnectionString();
-        switch (domain.Provider.ToLowerInvariant())
-        {
-            case "sqlite":
-                EnsureSqliteDirectory(connectionString);
-                builder.UseSqlite(connectionString);
-                break;
-            case "sqlserver":
-                builder.UseSqlServer(connectionString);
-                break;
-            default:
-                throw new InvalidOperationException(
-                    $"Domain '{domain.Name}': unknown provider '{domain.Provider}'. Supported: Sqlite, SqlServer.");
-        }
-    }
-
-    // SQLite creates the database file but not its directory.
-    private static void EnsureSqliteDirectory(string connectionString)
-    {
-        var dataSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
-        if (string.IsNullOrEmpty(dataSource) ||
-            dataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase)) return;
-        var directory = Path.GetDirectoryName(Path.GetFullPath(dataSource));
-        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+        var bootstrap = ProviderRegistry.Resolve(domain.Provider, domain.Name);
+        var connectionString = bootstrap.PrepareConnectionString(domain.ResolveConnectionString());
+        bootstrap.Configure(builder, connectionString);
     }
 
     internal static IEnumerable<Type> SafeGetTypes(Assembly assembly)

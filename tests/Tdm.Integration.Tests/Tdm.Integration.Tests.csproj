@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\Tdm.EfCore\Tdm.EfCore.csproj" />
     <ProjectReference Include="..\..\src\Tdm.Plugins\Tdm.Plugins.csproj" />
     <ProjectReference Include="..\..\src\Tdm.Observability\Tdm.Observability.csproj" />
+    <ProjectReference Include="..\Tdm.Tests.Matrix\Tdm.Tests.Matrix.csproj" />
     <ProjectReference Include="..\Acme.Orders.Data.Persistence\Acme.Orders.Data.Persistence.csproj" />
     <ProjectReference Include="..\Acme.Billing.Data.Infrastructure\Acme.Billing.Data.Infrastructure.csproj" />
   </ItemGroup>

@@ -5,6 +5,7 @@ using Tdm.Core.Grammar;
 using Tdm.Core.Manifest;
 using Tdm.Core.Settings;
 using Tdm.EfCore;
+using Tdm.EfCore.Providers;
 using Tdm.Host;
 using Tdm.Observability;
 using Tdm.Plugins;
@@ -832,6 +833,9 @@ namespace Tdm.Host
             {
                 var plugin = await loader.LoadAsync(domain, ct);
                 plugins.Add(plugin);
+                // Provider plugin packages (W3-D5) travel as dependencies of the domain package;
+                // their bootstraps must be registered before the runtime activates any context.
+                ProviderRegistry.DiscoverFrom(plugin.Assemblies, _log);
                 runtimes.Add(DomainRuntimeBuilder.Build(domain, _settings, plugin.Assemblies,
                     _loggerFactory.CreateLogger($"Tdm.Domain.{domain.Name}")));
             }

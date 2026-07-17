@@ -29,7 +29,11 @@ The `DbContext` must be constructible by TDM: a constructor taking
    `Microsoft.Extensions.*`, `Microsoft.Data.*`, `SQLitePCLRaw`, `Bogus` and `Tdm.*` are
    provided by the host and are excluded from feed restore automatically. Everything else
    your assembly needs must be a declared NuGet dependency (feed acquisition brings
-   transitive dependencies along).
+   transitive dependencies along). One exception: `Tdm.Providers.*` provider packages
+   (e.g. `Tdm.Providers.PostgreSql` for `"provider": "PostgreSql"`) are **not**
+   host-provided — declare the one your domain targets as a dependency and it loads from
+   your plugin folder
+   ([providers](https://github.com/chrisw000/test-data-manager/blob/main/docs/providers.md)).
 3. **Natural keys are contract**: the property TDM uses as the business key
    (`entities.{Name}.naturalKey`) feeds the cross-team identity contract
    `UUIDv5("{domain}|{Entity}|{naturalKey}")`. Renaming it is a breaking change for every

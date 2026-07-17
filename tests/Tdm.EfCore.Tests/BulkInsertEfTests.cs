@@ -10,10 +10,10 @@ using Xunit;
 namespace Tdm.EfCore.Tests;
 
 /// <summary>
-/// Provider-native bulk insert (W3-D3): the SQLite multi-row inserter end to end, strategy
-/// fallbacks, transaction enlistment, set-based teardown, and the SqlBulkCopy column mapping
-/// proven offline against a SQL Server-optioned EF model (the live run needs the W3-P3
-/// container matrix).
+/// Provider-native bulk insert (W3-D3): the matrix provider's native inserter end to end
+/// (SQLite multi-row batches by default; SqlBulkCopy / Npgsql binary COPY under the W3-P3
+/// container matrix), strategy fallbacks, transaction enlistment, set-based teardown, and
+/// the SqlBulkCopy column mapping proven offline against a SQL Server-optioned EF model.
 /// </summary>
 public class BulkInsertEfTests
 {
@@ -37,7 +37,7 @@ public class BulkInsertEfTests
         })];
 
     [Fact]
-    public async Task ProviderStrategy_OnSqlite_UsesMultiRowBatches_AndValuesRoundTrip()
+    public async Task ProviderStrategy_UsesNativeRoute_AndValuesRoundTrip()
     {
         await using var domains = new TestDomains();
         await using var runtime = domains.BuildOrders();
@@ -49,7 +49,7 @@ public class BulkInsertEfTests
         await runtime.EndScenarioAsync(Ct);
 
         outcome.Success.Should().BeTrue(outcome.Error);
-        outcome.Route.Should().Be("Sqlite(batch)");
+        outcome.Route.Should().Be(Tdm.Tests.Matrix.ProviderMatrix.ExpectedBulkRoute);
 
         await using var verify = domains.NewOrdersContext();
         (await verify.Products.CountAsync(Ct)).Should().Be(150);

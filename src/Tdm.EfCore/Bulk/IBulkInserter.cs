@@ -5,10 +5,11 @@ namespace Tdm.EfCore.Bulk;
 
 /// <summary>
 /// Provider-native bulk insert (W3-D3): SqlBulkCopy on SQL Server, multi-row INSERT batching
-/// on SQLite, binary COPY on PostgreSQL (W3-P3). The chunked EF AddRange path remains the
-/// portable fallback for providers (or entities) no inserter can handle. Implementations use
-/// the context's open connection and enlist in its current transaction, so Transactional
-/// lifecycle semantics hold.
+/// on SQLite, binary COPY on PostgreSQL (Tdm.Providers.PostgreSql). Inserters are contributed
+/// by provider bootstraps (W3-D5) and resolved via <c>ProviderRegistry.InserterFor</c>. The
+/// chunked EF AddRange path remains the portable fallback for providers (or entities) no
+/// inserter can handle. Implementations use the context's open connection and enlist in its
+/// current transaction, so Transactional lifecycle semantics hold.
 /// </summary>
 public interface IBulkInserter
 {
@@ -21,14 +22,3 @@ public interface IBulkInserter
         IReadOnlyList<object> rows, CancellationToken ct);
 }
 
-/// <summary>Built-in inserter per EF provider. W3-P3 moves this behind IProviderBootstrap so
-/// provider plugin packages can contribute their own.</summary>
-internal static class BulkInserters
-{
-    public static IBulkInserter? For(DbContext context) => context.Database.ProviderName switch
-    {
-        "Microsoft.EntityFrameworkCore.Sqlite" => SqliteBatchInserter.Instance,
-        "Microsoft.EntityFrameworkCore.SqlServer" => SqlServerBulkInserter.Instance,
-        _ => null,
-    };
-}

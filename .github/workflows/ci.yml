@@ -58,3 +58,31 @@ jobs:
           name: tdm-validate-junit
           path: output/tdm-validate.junit.xml
           if-no-files-found: ignore
+
+  # Provider container matrix (W3-P3): the same EfCore + integration suites run against
+  # SQL Server and PostgreSQL via Testcontainers (SQLite is the default leg above).
+  provider-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [SqlServer, PostgreSql]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (warnings are errors)
+        run: dotnet build --no-restore -warnaserror
+
+      - name: Test on ${{ matrix.provider }}
+        env:
+          TDM_TEST_PROVIDER: ${{ matrix.provider }}
+        run: |
+          dotnet test tests/Tdm.EfCore.Tests --no-build
+          dotnet test tests/Tdm.Integration.Tests --no-build

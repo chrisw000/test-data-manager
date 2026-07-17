@@ -55,8 +55,14 @@ public sealed class PluginLoadContext : AssemblyLoadContext
         return path is not null ? LoadUnmanagedDllFromPath(path) : nint.Zero;
     }
 
-    public static bool IsShared(string? assemblySimpleName) =>
-        assemblySimpleName is not null &&
-        SharedPrefixes.Any(p => assemblySimpleName.Equals(p, StringComparison.OrdinalIgnoreCase) ||
-                                assemblySimpleName.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase));
+    public static bool IsShared(string? assemblySimpleName)
+    {
+        if (assemblySimpleName is null) return false;
+        // Provider plugin packages (W3-D5, e.g. Tdm.Providers.PostgreSql) travel inside domain
+        // plugin folders and are NOT host-provided — they must load from the folder, unlike the
+        // rest of the Tdm.* surface whose type identity has to unify with the host's.
+        if (assemblySimpleName.StartsWith("Tdm.Providers.", StringComparison.OrdinalIgnoreCase)) return false;
+        return SharedPrefixes.Any(p => assemblySimpleName.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+                                       assemblySimpleName.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase));
+    }
 }

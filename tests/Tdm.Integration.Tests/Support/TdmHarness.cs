@@ -6,29 +6,29 @@ using Tdm.Core.Grammar;
 using Tdm.Core.Manifest;
 using Tdm.Core.Settings;
 using Tdm.EfCore;
+using Tdm.Tests.Matrix;
 using Xunit;
 
 namespace Tdm.Integration.Tests.Support;
 
 /// <summary>
-/// One isolated TDM environment per Reqnroll scenario: fresh temp SQLite databases for both
-/// sample domains, in-code settings, real DomainRuntimes, real TdmEngine. Reqnroll's context
-/// injection creates and disposes one instance per scenario.
+/// One isolated TDM environment per Reqnroll scenario: fresh databases in the matrix provider
+/// (W3-P3 — temp SQLite by default; SqlServer/PostgreSql containers under TDM_TEST_PROVIDER)
+/// for both sample domains, in-code settings, real DomainRuntimes, real TdmEngine. Reqnroll's
+/// context injection creates and disposes one instance per scenario.
 /// </summary>
 public sealed class TdmHarness : IDisposable
 {
-    private readonly string _directory =
-        Path.Combine(Path.GetTempPath(), "tdm-integration-tests", Guid.NewGuid().ToString("N"));
+    private readonly TestDatabases _databases = ProviderMatrix.CreateDatabases("orders", "billing");
     private readonly List<IDomainRuntime> _runtimes = [];
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     public TdmHarness()
     {
-        Directory.CreateDirectory(_directory);
-        OrdersConnectionString = $"Data Source={Path.Combine(_directory, "orders.db")}";
-        BillingConnectionString = $"Data Source={Path.Combine(_directory, "billing.db")}";
-        Settings = BuildSettings(OrdersConnectionString, BillingConnectionString);
+        OrdersConnectionString = _databases["orders"];
+        BillingConnectionString = _databases["billing"];
+        Settings = BuildSettings(OrdersConnectionString, BillingConnectionString, _databases.Provider);
     }
 
     public TdmSettings Settings { get; }
@@ -36,7 +36,8 @@ public sealed class TdmHarness : IDisposable
     public string BillingConnectionString { get; }
     public RunManifest? Manifest { get; private set; }
 
-    public static TdmSettings BuildSettings(string ordersConnectionString, string billingConnectionString)
+    public static TdmSettings BuildSettings(string ordersConnectionString, string billingConnectionString,
+        string provider = "Sqlite")
     {
         var settings = new TdmSettings
         {
@@ -51,12 +52,12 @@ public sealed class TdmHarness : IDisposable
             [
                 new DomainSettings
                 {
-                    Name = "Orders", Provider = "Sqlite", ConnectionString = ordersConnectionString,
+                    Name = "Orders", Provider = provider, ConnectionString = ordersConnectionString,
                     ConventionProfile = "modern", Persistence = PersistenceMode.RepositoryFirst, EnsureCreated = true,
                 },
                 new DomainSettings
                 {
-                    Name = "Billing", Provider = "Sqlite", ConnectionString = billingConnectionString,
+                    Name = "Billing", Provider = provider, ConnectionString = billingConnectionString,
                     ConventionProfile = "legacy", Persistence = PersistenceMode.DbContextOnly, EnsureCreated = true,
                 },
             ],
@@ -100,11 +101,12 @@ public sealed class TdmHarness : IDisposable
         return Manifest;
     }
 
+    // Verification contexts go through the provider registry, same as the runtime's own.
     public OrdersDbContext NewOrdersContext() => new(
-        new DbContextOptionsBuilder<OrdersDbContext>().UseSqlite(OrdersConnectionString).Options);
+        (DbContextOptions<OrdersDbContext>)DbContextActivator.BuildOptions(typeof(OrdersDbContext), Settings.Domains[0]));
 
     public BillingDbContext NewBillingContext() => new(
-        new DbContextOptionsBuilder<BillingDbContext>().UseSqlite(BillingConnectionString).Options);
+        (DbContextOptions<BillingDbContext>)DbContextActivator.BuildOptions(typeof(BillingDbContext), Settings.Domains[1]));
 
     public RunManifest RequireManifest() =>
         Manifest ?? throw new InvalidOperationException("No TDM run has been executed yet in this scenario.");
@@ -114,6 +116,6 @@ public sealed class TdmHarness : IDisposable
         foreach (var runtime in _runtimes)
             runtime.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _runtimes.Clear();
-        try { Directory.Delete(_directory, recursive: true); } catch { /* best effort */ }
+        _databases.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 }

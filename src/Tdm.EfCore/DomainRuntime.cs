@@ -373,7 +373,7 @@ public sealed class DomainRuntime : IDomainRuntime
         if (options.Strategy == BulkStrategy.Provider &&
             binding.EfType is not null &&
             !entity.KeyIsDbGenerated && entity.IdStrategy != IdStrategy.DbGenerated &&
-            BulkInserters.For(ctx) is { } inserter)
+            Providers.ProviderRegistry.InserterFor(ctx) is { } inserter)
         {
             if (BulkColumns.TryMap(binding.EfType, out var map, out var reason))
             {

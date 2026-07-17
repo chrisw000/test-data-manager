@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tdm.EfCore\Tdm.EfCore.csproj" />
+    <ProjectReference Include="..\..\src\Tdm.Providers.PostgreSql\Tdm.Providers.PostgreSql.csproj" />
+  </ItemGroup>
+
+</Project>

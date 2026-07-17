@@ -232,7 +232,7 @@ public static class ManifestPlayback
             }
 
             // Recorded values were produced by the same SnapshotValues stringification —
-            // string equality is exact, with one normalisation (see ValuesEqual).
+            // string equality is exact, with numeric/temporal normalisations (see ValuesEqual).
             var actualValues = descriptor.SnapshotValues(actual);
             foreach (var (property, recorded) in entry.Values)
             {
@@ -338,7 +338,11 @@ public static class ManifestPlayback
             DateTime.TryParse(current, System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind, out var currentTime))
         {
-            return recordedTime.Ticks == currentTime.Ticks;
+            // Store precision varies by provider: PostgreSQL timestamps carry microseconds,
+            // .NET ticks are 100 ns — compare at the coarsest common store precision so a
+            // faithful round-trip never reads as drift (W3-P3).
+            const long ticksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000;
+            return recordedTime.Ticks / ticksPerMicrosecond == currentTime.Ticks / ticksPerMicrosecond;
         }
         return false;
     }

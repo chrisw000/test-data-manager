@@ -12,6 +12,9 @@ public sealed class BulkColumn
     public required string ColumnName { get; init; }
     public required PropertyInfo Property { get; init; }
     public required Type ProviderClrType { get; init; }
+    /// <summary>The declared relational store type (e.g. "numeric(18,2)") — binary bulk
+    /// protocols (PostgreSQL COPY) need it to send correctly-typed values.</summary>
+    public required string StoreType { get; init; }
     public ValueConverter? Converter { get; init; }
 
     /// <summary>The value the provider stores — CLR value put through the EF value converter.</summary>
@@ -87,6 +90,7 @@ public static class BulkColumns
             columns.Add(new BulkColumn
             {
                 ColumnName = property.GetColumnName(store) ?? property.GetColumnName(),
+                StoreType = property.GetColumnType(store) ?? property.GetColumnType(),
                 Property = property.PropertyInfo,
                 Converter = converter,
                 ProviderClrType = Nullable.GetUnderlyingType(converter?.ProviderClrType ?? property.ClrType)

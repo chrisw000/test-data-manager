@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>TDM PostgreSQL provider plugin (W3-D5): Npgsql bootstrap and binary COPY bulk inserter. Version-aligned to the org EF baseline; add to a domain's plugin dependencies to target PostgreSQL.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tdm.EfCore\Tdm.EfCore.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -14,7 +14,7 @@ starting point with `tdm init`.
   "featurePaths": ["features/**/*.feature"],
   "benchmark": false,
   "bulkChunkSize": 500,              // bulk generate/persist batch size — `tdm bench tune` measures the best
-  "bulkStrategy": "Provider",        // Provider (SqlBulkCopy / multi-row INSERT) | EfCore (portable AddRange)
+  "bulkStrategy": "Provider",        // Provider (SqlBulkCopy / multi-row INSERT / binary COPY) | EfCore (portable AddRange)
   "manifestBulkValues": "Sample",    // All | Sample | None — manifest detail for count-bulk creates (W3-D4)
   "manifestBulkSampleRows": 5,       // rows kept with full values at each end in Sample mode
   "maxParallelScenarios": 1,         // >1 runs scenarios concurrently (W3-D1); steps stay sequential
@@ -35,7 +35,7 @@ starting point with `tdm init`.
   additionally writes a detached signature (`<manifest>.sig`), verified with
   `tdm manifest verify <file> --cert <public-cert>`.
 - **bulkStrategy / manifestBulkValues** — count-bulk creates stream in O(chunk) memory
-  through provider-native inserters (SqlBulkCopy, SQLite multi-row INSERT) with the EF path
+  through provider-native inserters (SqlBulkCopy, SQLite multi-row INSERT, PostgreSQL binary COPY) with the EF path
   as fallback; `Sample` mode keeps manifests usable at a million rows (head/tail values +
   count + value hash). See
   [bulk-and-streaming](https://github.com/chrisw000/test-data-manager/blob/main/docs/bulk-and-streaming.md).
@@ -72,7 +72,7 @@ TDM handles no secrets.
   "package": "Acme.Orders.Data.Persistence",  // NuGet package id (NuGet acquisition)
   "packageVersion": "3.2.*",                  // optional; omit = latest stable
   "pluginPath": "./plugins/Orders",           // Folder acquisition; defaults to ./plugins/{name}
-  "provider": "Sqlite",                       // Sqlite | SqlServer
+  "provider": "Sqlite",                       // Sqlite | SqlServer (in-box) | PostgreSql (plugin) | any registered IProviderBootstrap
   "connectionString": "Data Source=./output/orders.db",
   "connectionStringName": "OrdersDb",         // else resolved from env: TDM_CONNECTIONSTRINGS__ORDERSDB
   "conventionProfile": "modern",              // see Convention profiles

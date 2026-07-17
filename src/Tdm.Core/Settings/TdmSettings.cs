@@ -183,7 +183,8 @@ public sealed class DomainSettings
     public string? PackageVersion { get; set; }
     /// <summary>Explicit plugin folder; defaults to ./plugins/{Name} when omitted.</summary>
     public string? PluginPath { get; set; }
-    /// <summary>Sqlite | SqlServer. Provider assemblies ship with the TDM host.</summary>
+    /// <summary>Sqlite | SqlServer (in-box) | any provider registered via an IProviderBootstrap
+    /// plugin package, e.g. PostgreSql from Tdm.Providers.PostgreSql (W3-D5).</summary>
     public string Provider { get; set; } = "Sqlite";
     /// <summary>Inline connection string; wins over <see cref="ConnectionStringName"/>.</summary>
     public string? ConnectionString { get; set; }

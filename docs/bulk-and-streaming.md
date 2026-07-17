@@ -14,6 +14,7 @@ of `run.bulkChunkSize`. Memory is **O(chunk), not O(count)**, at any row count.
 |---|---|---|
 | SQL Server | `SqlBulkCopy` | rows projected through the EF value converters into a `DataTable`, streamed over the context's connection |
 | SQLite | `Sqlite(batch)` | multi-row `INSERT` statements (~900 parameters each); each chunk is atomic |
+| PostgreSQL | `Npgsql(COPY)` | wire-level binary `COPY … FROM STDIN`, store-typed values; each chunk's stream is atomic ([providers](providers.md)) |
 | anything else / ineligible entity | `DbContext(bulk)` | the portable chunked `AddRange`+`SaveChanges` path (v1) |
 
 Inserters enlist in the scenario's transaction, so `Transactional` lifecycle rolls bulk rows

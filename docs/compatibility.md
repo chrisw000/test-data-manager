@@ -6,7 +6,7 @@ rejected at plugin load with an *EF version skew* error that links here.
 
 | TDM version | Host runtime | EF Core baseline | Providers shipped | `Tdm.Identity` targets |
 |---|---|---|---|---|
-| 0.1.x | .NET 10 | 8.0.x (pinned 8.0.28) | Sqlite, SqlServer | netstandard2.0, net10.0 |
+| 0.1.x | .NET 10 | 8.0.x (pinned 8.0.28) | Sqlite, SqlServer in-box; PostgreSql via `Tdm.Providers.PostgreSql` (Npgsql 8.0.x) | netstandard2.0, net10.0 |
 
 ## Rules
 
