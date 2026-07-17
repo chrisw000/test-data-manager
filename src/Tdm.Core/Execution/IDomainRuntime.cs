@@ -13,6 +13,10 @@ public sealed class PersistOutcome
     public static PersistOutcome Fail(string error, string? route = null) => new() { Success = false, Error = error, Route = route };
 }
 
+/// <summary>How a bulk chunk is persisted (W3-D3): the transaction/statement batch size and
+/// whether a provider-native inserter may be used over the portable EF path.</summary>
+public sealed record BulkPersistOptions(int ChunkSize, BulkStrategy Strategy);
+
 public sealed class ScenarioCloseOutcome
 {
     public int Deleted { get; set; }
@@ -70,7 +74,13 @@ public interface IDomainRuntime : IAsyncDisposable
     object Generate(EntityDescriptor entity, out string fakerSource, List<string> warnings);
 
     Task<PersistOutcome> CreateAsync(EntityDescriptor entity, object instance, bool forceDbContext = false, CancellationToken ct = default);
-    Task<PersistOutcome> CreateBulkAsync(EntityDescriptor entity, IReadOnlyList<object> instances, int chunkSize, CancellationToken ct = default);
+
+    /// <summary>
+    /// Persists one bounded batch of a count-bulk create (W3-D3). The engine streams
+    /// generation and calls this once per chunk, so memory stays O(chunk). Rows created under
+    /// TrackedTeardown are tracked by primary key, not instance, and torn down set-based.
+    /// </summary>
+    Task<PersistOutcome> CreateBulkAsync(EntityDescriptor entity, IReadOnlyList<object> instances, BulkPersistOptions options, CancellationToken ct = default);
     Task<PersistOutcome> UpdateAsync(EntityDescriptor entity, object instance, CancellationToken ct = default);
     Task<PersistOutcome> DeleteAsync(EntityDescriptor entity, object instance, CancellationToken ct = default);
     Task<int> DeleteWhereAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default);

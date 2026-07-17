@@ -56,6 +56,14 @@ public static class ManifestPlayback
                 continue;
             }
 
+            foreach (var bulk in scenario.BulkOperations.Where(b => b.HashedRows > 0))
+            {
+                report.Warnings.Add(
+                    $"[{scenario.Scenario}] bulk create of {bulk.Count} {bulk.Entity} row(s) was recorded in " +
+                    $"{bulk.Mode} mode — only the {bulk.SampledRows} sampled row(s) can be replayed; " +
+                    $"re-run the original feature to reproduce the full set.");
+            }
+
             // Replay always runs Persistent — the rows are the point.
             foreach (var runtime in runtimes)
                 await runtime.BeginScenarioAsync(LifecycleMode.Persistent, scenario.Seed, ct).ConfigureAwait(false);
@@ -166,6 +174,12 @@ public static class ManifestPlayback
             {
                 report.SkippedScenarios++;
                 continue;
+            }
+            foreach (var bulk in scenario.BulkOperations.Where(b => b.HashedRows > 0))
+            {
+                report.Warnings.Add(
+                    $"[{scenario.Scenario}] bulk create of {bulk.Count} {bulk.Entity} row(s) was recorded in " +
+                    $"{bulk.Mode} mode — only the {bulk.SampledRows} sampled row(s) are verifiable.");
             }
             foreach (var entry in scenario.Entities.OrderBy(e => e.Ordinal))
             {

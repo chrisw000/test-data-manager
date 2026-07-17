@@ -208,7 +208,7 @@ public class DomainRuntimeTests
         var rows = Enumerable.Range(1, 25)
             .Select(i => (object)new ProductEntity { Id = Guid.NewGuid(), Sku = $"B-{i}", Category = "Bulk" })
             .ToList();
-        var outcome = await runtime.CreateBulkAsync(product, rows, chunkSize: 10, Ct);
+        var outcome = await runtime.CreateBulkAsync(product, rows, new BulkPersistOptions(ChunkSize: 10, BulkStrategy.EfCore), Ct);
         await runtime.EndScenarioAsync(Ct);
 
         outcome.Success.Should().BeTrue(outcome.Error);

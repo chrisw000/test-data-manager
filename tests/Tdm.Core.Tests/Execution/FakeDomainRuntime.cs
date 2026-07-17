@@ -108,11 +108,12 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
         }
     }
 
-    public Task<PersistOutcome> CreateBulkAsync(EntityDescriptor entity, IReadOnlyList<object> instances, int chunkSize, CancellationToken ct = default)
+    public Task<PersistOutcome> CreateBulkAsync(EntityDescriptor entity, IReadOnlyList<object> instances, BulkPersistOptions options, CancellationToken ct = default)
     {
         lock (_sync)
         {
             Calls.Add($"createBulk:{entity.LogicalName}:{instances.Count}");
+            if (FailCreates) return Task.FromResult(PersistOutcome.Fail("boom", "FakeStore(bulk)"));
             Rows(entity).AddRange(instances);
             return Task.FromResult(PersistOutcome.Ok("FakeStore(bulk)"));
         }

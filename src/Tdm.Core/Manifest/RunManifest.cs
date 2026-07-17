@@ -109,6 +109,9 @@ public sealed class ScenarioManifest
     public List<string> Tags { get; set; } = [];
     public LifecycleMode Lifecycle { get; set; }
     public List<EntityManifest> Entities { get; set; } = [];
+    /// <summary>One summary per count-bulk create (W3-D4). In Sample/None modes the rows not
+    /// carried in <see cref="Entities"/> are represented here by count + value hash.</summary>
+    public List<BulkOperationManifest> BulkOperations { get; set; } = [];
     public List<ReferenceManifest> References { get; set; } = [];
     public List<UnmatchedStepManifest> UnmatchedSteps { get; set; } = [];
     public List<string> Warnings { get; set; } = [];
@@ -133,6 +136,35 @@ public sealed class EntityManifest
     public Dictionary<string, string?> Values { get; set; } = [];
     public List<string> OverridesApplied { get; set; } = [];
     public List<string> Warnings { get; set; } = [];
+    public double DurationMs { get; set; }
+}
+
+/// <summary>
+/// Aggregate record of one count-bulk create (W3-D4). Sampled rows (and any failed rows,
+/// which always keep their full entries) live in <see cref="ScenarioManifest.Entities"/>;
+/// the rest are audit-summarised as a count plus an ordinal-ordered SHA-256 value hash —
+/// the manifest stays usable at a million rows without losing tamper-evidence.
+/// </summary>
+public sealed class BulkOperationManifest
+{
+    public string Entity { get; set; } = "";
+    public string Domain { get; set; } = "";
+    public string Verb { get; set; } = "Create";
+    /// <summary>Rows the step asked for.</summary>
+    public int Requested { get; set; }
+    /// <summary>Rows successfully persisted ("dry-run" rows in a validate pass count here too).</summary>
+    public int Count { get; set; }
+    public int Failed { get; set; }
+    public string? PersistedVia { get; set; }
+    public BulkManifestMode Mode { get; set; }
+    /// <summary>Rows carried with full values in the scenario's entities list.</summary>
+    public int SampledRows { get; set; }
+    /// <summary>Rows represented only by <see cref="ValuesSha256"/>.</summary>
+    public int HashedRows { get; set; }
+    /// <summary>SHA-256 (hex) over the ordinal-ordered canonical snapshots of the unsampled rows.</summary>
+    public string? ValuesSha256 { get; set; }
+    public int FirstOrdinal { get; set; }
+    public int LastOrdinal { get; set; }
     public double DurationMs { get; set; }
 }
 

@@ -164,6 +164,29 @@ manifestVerifyCommand.SetAction(parseResult =>
 });
 var manifestCommand = new Command("manifest", "Manifest integrity utilities.") { manifestVerifyCommand };
 
+var tuneEntityOption = new Option<string?>("--entity") { Description = "Entity to bulk-insert (default: first entity with a client-set single-column key)" };
+var tuneRowsOption = new Option<int>("--rows") { Description = "Rows inserted per measurement", DefaultValueFactory = _ => 2000 };
+var tuneChunksOption = new Option<string>("--chunk-sizes")
+{
+    Description = "Comma-separated chunk sizes to measure",
+    DefaultValueFactory = _ => "100,250,500,1000,2000",
+};
+var tuneNoWriteOption = new Option<bool>("--no-write") { Description = "Report the best chunk size without updating tdm.settings.json" };
+var benchTuneCommand = new Command("tune",
+    "Measure bulk-insert throughput across a matrix of chunk sizes against the target database and write the best into run.bulkChunkSize (W3-D3). Inserts and then deletes --rows rows per chunk size — point it at a dev database.")
+{
+    settingsOption, domainOption, tuneEntityOption, tuneRowsOption, tuneChunksOption, tuneNoWriteOption,
+};
+benchTuneCommand.SetAction(async (parseResult, ct) =>
+{
+    var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!, null, null, null, null);
+    return await composer.BenchTuneAsync(
+        parseResult.GetValue(domainOption), parseResult.GetValue(tuneEntityOption),
+        parseResult.GetValue(tuneRowsOption), parseResult.GetValue(tuneChunksOption)!,
+        write: !parseResult.GetValue(tuneNoWriteOption), ct);
+});
+var benchCommand = new Command("bench", "Benchmark utilities.") { benchTuneCommand };
+
 root.Subcommands.Add(runCommand);
 root.Subcommands.Add(validateCommand);
 root.Subcommands.Add(teardownCommand);
@@ -173,6 +196,7 @@ root.Subcommands.Add(explainCommand);
 root.Subcommands.Add(manifestCommand);
 root.Subcommands.Add(replayCommand);
 root.Subcommands.Add(verifyCommand);
+root.Subcommands.Add(benchCommand);
 
 try
 {
@@ -437,6 +461,126 @@ namespace Tdm.Host
             }
         }
 
+        /// <summary>
+        /// `tdm bench tune` (W3-D3): inserts --rows rows of one entity at each candidate chunk
+        /// size (TrackedTeardown, so every measurement cleans up set-based afterwards), ranks
+        /// by throughput and writes the winner into run.bulkChunkSize — a targeted textual
+        /// edit, so settings-file comments survive.
+        /// </summary>
+        public async Task<int> BenchTuneAsync(string? domainName, string? entityName, int rows,
+            string chunkSizesCsv, bool write, CancellationToken ct)
+        {
+            var chunkSizes = chunkSizesCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(int.Parse).Where(c => c > 0).Distinct().ToArray();
+            if (chunkSizes.Length == 0) throw new InvalidOperationException("--chunk-sizes contained no positive numbers.");
+            if (rows < chunkSizes.Max())
+                _log.LogWarning("--rows {Rows} is smaller than the largest chunk size {Max} — measurements will not differentiate.", rows, chunkSizes.Max());
+
+            var (runtimes, plugins) = await BuildRuntimesAsync(ct);
+            try
+            {
+                var runtime = domainName is null
+                    ? runtimes[0]
+                    : runtimes.FirstOrDefault(r => string.Equals(r.Name, domainName, StringComparison.OrdinalIgnoreCase))
+                      ?? throw new InvalidOperationException(
+                          $"Domain '{domainName}' is not configured. Known domains: {string.Join(", ", runtimes.Select(r => r.Name))}.");
+
+                EntityDescriptor descriptor;
+                if (entityName is not null)
+                {
+                    if (!runtime.TryResolveEntity(entityName, out var resolved, out var error))
+                        throw new InvalidOperationException(error ?? $"Entity '{entityName}' not found in domain '{runtime.Name}'.");
+                    descriptor = resolved!;
+                }
+                else
+                {
+                    descriptor = runtime.Entities.FirstOrDefault(e =>
+                                     e.KeyProperty is not null && !e.KeyIsDbGenerated &&
+                                     e.KeyProperty.PropertyType == typeof(Guid))
+                                 ?? throw new InvalidOperationException(
+                                     $"No entity with a client-set Guid key found in domain '{runtime.Name}' — name one with --entity.");
+                }
+
+                _log.LogInformation("Measuring bulk insert of {Rows} {Entity} rows per chunk size against domain {Domain} " +
+                                    "(strategy {Strategy}); rows are deleted after each measurement.",
+                    rows, descriptor.LogicalName, runtime.Name, _settings.Run.BulkStrategy);
+
+                var results = new List<(int Chunk, double Ms, double RowsPerSec, string? Route)>();
+                for (var iteration = 0; iteration < chunkSizes.Length; iteration++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var chunk = chunkSizes[iteration];
+                    await runtime.BeginScenarioAsync(LifecycleMode.TrackedTeardown, seed: 7000 + iteration, ct);
+                    try
+                    {
+                        var warnings = new List<string>();
+                        var instances = new List<object>(rows);
+                        for (var i = 0; i < rows; i++)
+                        {
+                            var instance = runtime.Generate(descriptor, out _, warnings);
+                            // Unique keys per row/iteration — faker output may repeat.
+                            if (descriptor.NaturalKeyProperty?.PropertyType == typeof(string))
+                                descriptor.NaturalKeyProperty.SetValue(instance, $"bench-tune-{iteration}-{i}");
+                            if (descriptor.KeyProperty?.PropertyType == typeof(Guid))
+                                descriptor.SetKey(instance, Guid.NewGuid());
+                            instances.Add(instance);
+                        }
+
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        var outcome = await runtime.CreateBulkAsync(descriptor, instances,
+                            new BulkPersistOptions(chunk, _settings.Run.BulkStrategy), ct);
+                        sw.Stop();
+                        if (!outcome.Success)
+                            throw new InvalidOperationException($"Bulk insert failed at chunk size {chunk}: {outcome.Error}");
+
+                        var rowsPerSec = rows / Math.Max(0.001, sw.Elapsed.TotalSeconds);
+                        results.Add((chunk, sw.Elapsed.TotalMilliseconds, rowsPerSec, outcome.Route));
+                        _log.LogInformation("  chunk {Chunk,6}: {Ms,8:F0} ms   {Throughput,10:F0} rows/s   via {Route}",
+                            chunk, sw.Elapsed.TotalMilliseconds, rowsPerSec, outcome.Route);
+                    }
+                    finally
+                    {
+                        var close = await runtime.EndScenarioAsync(CancellationToken.None);
+                        if (close.Orphaned.Count > 0)
+                            _log.LogWarning("Cleanup left {Count} orphaned row(s): {First}", close.Orphaned.Count, close.Orphaned[0]);
+                    }
+                }
+
+                var best = results.MaxBy(r => r.RowsPerSec);
+                _log.LogInformation("Best: chunk size {Chunk} at {Throughput:F0} rows/s (via {Route}).",
+                    best.Chunk, best.RowsPerSec, best.Route);
+
+                if (!write)
+                {
+                    _log.LogInformation("--no-write given — set run.bulkChunkSize to {Chunk} to apply.", best.Chunk);
+                    return 0;
+                }
+
+                var text = File.ReadAllText(_settingsFilePath);
+                var updated = System.Text.RegularExpressions.Regex.Replace(text,
+                    "\"bulkChunkSize\"\\s*:\\s*\\d+", $"\"bulkChunkSize\": {best.Chunk}");
+                if (!ReferenceEquals(text, updated) && text != updated)
+                {
+                    File.WriteAllText(_settingsFilePath, updated);
+                    _log.LogInformation("run.bulkChunkSize set to {Chunk} in {File}.", best.Chunk, _settingsFilePath);
+                }
+                else if (text.Contains($"\"bulkChunkSize\": {best.Chunk}"))
+                {
+                    _log.LogInformation("run.bulkChunkSize is already {Chunk} — nothing to write.", best.Chunk);
+                }
+                else
+                {
+                    _log.LogWarning("No bulkChunkSize property found in {File} — add \"bulkChunkSize\": {Chunk} to the run section.",
+                        _settingsFilePath, best.Chunk);
+                }
+                return 0;
+            }
+            finally
+            {
+                await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
         public async Task<int> TeardownAsync(string manifestPath, CancellationToken ct)
         {
             var manifest = ManifestWriter.Read(Path.GetFullPath(manifestPath));
@@ -445,6 +589,15 @@ namespace Tdm.Host
             {
                 var deleted = 0;
                 var orphaned = new List<string>();
+
+                foreach (var scenario in manifest.Scenarios)
+                foreach (var bulk in scenario.BulkOperations.Where(b => b.HashedRows > 0))
+                {
+                    _log.LogWarning("[{Scenario}] bulk create of {Count} {Entity} row(s) was recorded in {Mode} mode — " +
+                                    "only the {Sampled} sampled row(s) can be torn down from this manifest. " +
+                                    "Use manifestBulkValues: All, or a delete-all step, when bulk rows must be manifest-removable.",
+                        scenario.Scenario, bulk.Count, bulk.Entity, bulk.Mode, bulk.SampledRows);
+                }
 
                 // Reverse creation order across the whole manifest (children before principals).
                 var created = manifest.Scenarios

@@ -342,9 +342,14 @@ public sealed class TdmEngine(
         if (resolved is null) return;
         var (runtime, descriptor) = resolved.Value;
 
-        var isBulk = step.Rows is null && step.Count > 1;
-        var rows = step.Rows ?? [.. Enumerable.Repeat(step.Overrides, step.Count)];
-        var bulkBuffer = new List<(object Instance, EntityManifest Entry)>();
+        if (step.Rows is null && step.Count > 1)
+        {
+            // Count-bulk creates stream through a bounded pipeline (W3-D3/W3-D4).
+            await ExecuteBulkCreateAsync(state, step, runtime, descriptor, ct).ConfigureAwait(false);
+            return;
+        }
+
+        var rows = step.Rows ?? [step.Overrides];
 
         foreach (var overrides in rows)
         {
@@ -370,7 +375,7 @@ public sealed class TdmEngine(
                 // (handoff §7), so a pre-existing row is reused rather than collided with —
                 // re-running a Persistent environment seed must not explode. The step's explicit
                 // overrides declare desired state, so they are re-applied to the existing row.
-                if (!state.DryRun && !isBulk && descriptor.GetNaturalKey(instance) is { Length: > 0 } candidateKey)
+                if (!state.DryRun && descriptor.GetNaturalKey(instance) is { Length: > 0 } candidateKey)
                 {
                     object? existing = null;
                     try { existing = await runtime.FindByNaturalKeyAsync(descriptor, candidateKey, ct).ConfigureAwait(false); }
@@ -399,10 +404,6 @@ public sealed class TdmEngine(
                 if (state.DryRun)
                 {
                     entry.PersistedVia = "dry-run";
-                }
-                else if (isBulk)
-                {
-                    bulkBuffer.Add((instance, entry));
                 }
                 else
                 {
@@ -459,13 +460,110 @@ public sealed class TdmEngine(
             }
             FinishEntry(state, entry, entitySw);
         }
+    }
 
-        if (bulkBuffer.Count > 0)
+    /// <summary>
+    /// The count-bulk streaming pipeline (W3-D3/W3-D4): generate → override → reference →
+    /// identity → persist, in bounded chunks, so memory is O(chunk) however large the count.
+    /// The manifest records rows per <c>run.manifestBulkValues</c>: all of them, a head/tail
+    /// sample plus a value hash of the rest, or count + hash only. Failed rows always keep
+    /// their full entries. Bulk rows are not registered in the scenario context bag —
+    /// references to them resolve from the database.
+    /// </summary>
+    private async Task ExecuteBulkCreateAsync(ScenarioState state, CreateStep step,
+        IDomainRuntime runtime, EntityDescriptor descriptor, CancellationToken ct)
+    {
+        var mode = settings.Run.ManifestBulkValues;
+        var sampleRows = mode == BulkManifestMode.Sample ? Math.Max(0, settings.Run.ManifestBulkSampleRows) : 0;
+        var keepHead = mode == BulkManifestMode.All ? int.MaxValue : sampleRows;
+        var keepTail = mode == BulkManifestMode.All ? 0 : sampleRows;
+        var chunkSize = Math.Max(1, settings.Run.BulkChunkSize);
+        var options = new BulkPersistOptions(chunkSize, settings.Run.BulkStrategy);
+
+        var summary = new BulkOperationManifest
         {
-            var sw = Stopwatch.StartNew();
+            Entity = descriptor.LogicalName,
+            Domain = runtime.Name,
+            Verb = "Create",
+            Requested = step.Count,
+            Mode = mode,
+            FirstOrdinal = state.Ordinal + 1,
+        };
+        state.Manifest.BulkOperations.Add(summary);
+
+        var sw = Stopwatch.StartNew();
+        using var restHash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var tail = new Queue<(object Instance, EntityManifest Entry)>();
+        var headKept = 0;
+        var chunk = new List<(object Instance, EntityManifest Entry)>(Math.Min(chunkSize, step.Count));
+
+        for (var i = 0; i < step.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var ordinal = ++state.Ordinal;
+            var entry = new EntityManifest
+            {
+                Ordinal = ordinal,
+                Entity = descriptor.LogicalName,
+                Verb = "Create",
+                Domain = runtime.Name,
+            };
+
+            try
+            {
+                var instance = Generate(state, runtime, descriptor, entry);
+                ApplyOverrides(state, descriptor, instance, step.Overrides, entry);
+                await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
+                ApplyIdentity(state, runtime, descriptor, instance, ordinal, entry);
+                chunk.Add((instance, entry));
+            }
+            catch (TdmObjectRejectedException ex)
+            {
+                entry.Warnings.Add($"Object rejected (FailObject): {ex.Message}");
+                state.Manifest.Warnings.Add($"[line {step.Line}] object rejected: {ex.Message}");
+                summary.Failed++;
+                FinishEntry(state, entry, sw: null); // failed rows always keep their entry
+            }
+
+            if (chunk.Count >= chunkSize || i == step.Count - 1)
+                await FlushChunkAsync().ConfigureAwait(false);
+        }
+
+        while (tail.Count > 0)
+        {
+            var (_, entry) = tail.Dequeue();
+            summary.SampledRows++;
+            FinishEntry(state, entry, sw: null);
+        }
+
+        summary.LastOrdinal = state.Ordinal;
+        summary.ValuesSha256 = summary.HashedRows > 0
+            ? Convert.ToHexString(restHash.GetHashAndReset()).ToLowerInvariant()
+            : null;
+        summary.DurationMs = Math.Round(sw.Elapsed.TotalMilliseconds, 3);
+
+        async Task FlushChunkAsync()
+        {
+            if (chunk.Count == 0) return;
+
+            if (state.DryRun)
+            {
+                foreach (var (instance, entry) in chunk)
+                {
+                    entry.PersistedVia = "dry-run";
+                    CompleteCreatedEntry(state, descriptor, instance, entry, addToBag: false);
+                }
+                summary.Count += chunk.Count;
+                summary.PersistedVia ??= "dry-run";
+                RecordChunkEntries();
+                chunk.Clear();
+                return;
+            }
+
+            var persistSw = Stopwatch.StartNew();
             var outcome = await runtime.CreateBulkAsync(descriptor,
-                bulkBuffer.Select(b => b.Instance).ToList(), settings.Run.BulkChunkSize, ct).ConfigureAwait(false);
-            var ms = sw.Elapsed.TotalMilliseconds;
+                chunk.Select(c => c.Instance).ToList(), options, ct).ConfigureAwait(false);
+            var ms = persistSw.Elapsed.TotalMilliseconds;
             state.Bench.Record("create", descriptor.LogicalName, ms);
             if (state.DeepBenchmark) state.Bench.Record("persist", descriptor.LogicalName, ms);
             TdmDiagnostics.PersistDuration.Record(ms,
@@ -474,20 +572,75 @@ public sealed class TdmEngine(
 
             if (!outcome.Success)
             {
-                TdmDiagnostics.EntitiesFailed.Add(bulkBuffer.Count);
-                ObjectProblem(state, $"Bulk persist failed for {descriptor.LogicalName}: {outcome.Error}");
-                foreach (var (_, entry) in bulkBuffer) entry.Warnings.Add(outcome.Error ?? "bulk persist failed");
-            }
-            else
-            {
-                TdmDiagnostics.EntitiesCreated.Add(bulkBuffer.Count,
-                    new KeyValuePair<string, object?>("entity", descriptor.LogicalName));
-                foreach (var (instance, entry) in bulkBuffer)
+                TdmDiagnostics.EntitiesFailed.Add(chunk.Count);
+                summary.Failed += chunk.Count;
+                summary.PersistedVia ??= outcome.Route;
+                foreach (var (instance, entry) in chunk)
                 {
                     entry.PersistedVia = outcome.Route;
-                    CompleteCreatedEntry(state, descriptor, instance, entry);
+                    entry.Warnings.Add(outcome.Error ?? "bulk persist failed");
+                    CompleteCreatedEntry(state, descriptor, instance, entry, addToBag: false);
+                    FinishEntry(state, entry, sw: null); // failed rows always keep their entries
                 }
+                chunk.Clear();
+                var problem = $"Bulk persist failed for {descriptor.LogicalName}: {outcome.Error}";
+                if (outcome.Error is { } error &&
+                    (error.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ||
+                     error.Contains("duplicate", StringComparison.OrdinalIgnoreCase)))
+                {
+                    problem += $" Hint: at {step.Count} rows, a faker natural-key collision is the usual cause — " +
+                               "identical natural keys derive identical deterministic ids (the identity contract). " +
+                               $"Give {descriptor.LogicalName}'s natural key a collision-free component (e.g. Bogus IndexFaker).";
+                }
+                // FailRun aborts here; BestEffort/FailObject continue with the next chunk.
+                ObjectProblem(state, problem);
+                return;
             }
+
+            TdmDiagnostics.EntitiesCreated.Add(chunk.Count,
+                new KeyValuePair<string, object?>("entity", descriptor.LogicalName));
+            summary.Count += chunk.Count;
+            summary.PersistedVia ??= outcome.Route;
+            foreach (var (instance, entry) in chunk)
+            {
+                entry.PersistedVia = outcome.Route;
+                CompleteCreatedEntry(state, descriptor, instance, entry, addToBag: false);
+            }
+            RecordChunkEntries();
+            chunk.Clear();
+        }
+
+        void RecordChunkEntries()
+        {
+            foreach (var item in chunk)
+            {
+                if (headKept < keepHead)
+                {
+                    headKept++;
+                    summary.SampledRows++;
+                    FinishEntry(state, item.Entry, sw: null);
+                    continue;
+                }
+                if (keepTail > 0)
+                {
+                    tail.Enqueue(item);
+                    if (tail.Count > keepTail) HashAndDrop(tail.Dequeue().Entry);
+                    continue;
+                }
+                HashAndDrop(item.Entry);
+            }
+        }
+
+        void HashAndDrop(EntityManifest entry)
+        {
+            var canonical = new System.Text.StringBuilder()
+                .Append(entry.Ordinal).Append('|')
+                .Append(entry.Id).Append('|')
+                .Append(entry.NaturalKey);
+            foreach (var (name, value) in entry.Values.OrderBy(v => v.Key, StringComparer.Ordinal))
+                canonical.Append('\u001f').Append(name).Append('=').Append(value);
+            restHash.AppendData(System.Text.Encoding.UTF8.GetBytes(canonical.ToString()));
+            summary.HashedRows++;
         }
     }
 
@@ -510,7 +663,8 @@ public sealed class TdmEngine(
         }
     }
 
-    private void CompleteCreatedEntry(ScenarioState state, EntityDescriptor descriptor, object instance, EntityManifest entry)
+    private void CompleteCreatedEntry(ScenarioState state, EntityDescriptor descriptor, object instance,
+        EntityManifest entry, bool addToBag = true)
     {
         var id = descriptor.GetKey(instance);
         entry.Id = Convert.ToString(id, System.Globalization.CultureInfo.InvariantCulture);
@@ -521,7 +675,9 @@ public sealed class TdmEngine(
 
         var naturalKey = descriptor.GetNaturalKey(instance);
         entry.NaturalKey = naturalKey;
-        if (!string.IsNullOrEmpty(naturalKey))
+        // Bulk rows stay out of the bag — holding a million instances would defeat the
+        // O(chunk) pipeline; references to them resolve from the database instead.
+        if (addToBag && !string.IsNullOrEmpty(naturalKey))
             state.Bag.AddCreated(descriptor, naturalKey, instance, id);
     }
 
@@ -1099,9 +1255,12 @@ public sealed class TdmEngine(
         return outcome;
     }
 
-    private void FinishEntry(ScenarioState state, EntityManifest entry, Stopwatch sw)
+    private void FinishEntry(ScenarioState state, EntityManifest entry, Stopwatch? sw)
     {
-        entry.DurationMs = Math.Round(sw.Elapsed.TotalMilliseconds, 3);
+        // Bulk rows carry no per-entity timing — the chunk persist time lives in the
+        // benchmark stats and the bulk summary.
+        if (sw is not null)
+            entry.DurationMs = Math.Round(sw.Elapsed.TotalMilliseconds, 3);
         state.Manifest.Entities.Add(entry);
     }
 

@@ -11,6 +11,7 @@ using Tdm.Core.Conversion;
 using Tdm.Core.Execution;
 using Tdm.Core.Naming;
 using Tdm.Core.Settings;
+using Tdm.EfCore.Bulk;
 using Tdm.EfCore.Fakers;
 using Tdm.EfCore.Querying;
 using Tdm.EfCore.Repositories;
@@ -95,6 +96,10 @@ public sealed class DomainRuntime : IDomainRuntime
     private readonly List<IDbContextTransaction> _transactions = [];
     private readonly Dictionary<Type, object> _fakerInstances = [];
     private readonly List<(EntityBinding Binding, object Instance)> _tracked = [];
+    /// <summary>Bulk rows under TrackedTeardown are tracked by primary key, not instance
+    /// (W3-D4) — 1M tracked instances would defeat the O(chunk) streaming pipeline. Torn
+    /// down set-based in <see cref="DeleteByKeysAsync"/>.</summary>
+    private readonly List<(EntityBinding Binding, List<object> Keys)> _trackedBulk = [];
     private readonly HashSet<Type> _repoResolutionFailures = [];
     private ServiceProvider? _repositories;
     private Faker _autoFaker = new();
@@ -215,7 +220,25 @@ public sealed class DomainRuntime : IDomainRuntime
                     break;
 
                 case LifecycleMode.TrackedTeardown:
-                    // Reverse dependency order: children were created after their principals.
+                    // Bulk-created row sets first (they are leaves — bulk rows are never
+                    // principals of individually-created children in the same scenario order),
+                    // newest set first, then individually tracked instances in reverse
+                    // dependency order: children were created after their principals.
+                    for (var i = _trackedBulk.Count - 1; i >= 0; i--)
+                    {
+                        var (bulkBinding, keys) = _trackedBulk[i];
+                        try
+                        {
+                            outcome.Deleted += await DeleteByKeysAsync(bulkBinding, keys, ct).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            outcome.Orphaned.Add(
+                                $"{Name}.{bulkBinding.Descriptor.LogicalName}: set-based teardown of {keys.Count} bulk row(s) failed — {ex.Message}");
+                            Log.LogWarning(ex, "Set-based teardown failed for {Count} {Entity} bulk row(s); rows left orphaned",
+                                keys.Count, bulkBinding.Descriptor.LogicalName);
+                        }
+                    }
                     for (var i = _tracked.Count - 1; i >= 0; i--)
                     {
                         var (binding, instance) = _tracked[i];
@@ -255,6 +278,7 @@ public sealed class DomainRuntime : IDomainRuntime
         if (_repositories is not null) await _repositories.DisposeAsync().ConfigureAwait(false);
         _repositories = null;
         _tracked.Clear();
+        _trackedBulk.Clear();
         _fakerInstances.Clear();
     }
 
@@ -335,33 +359,71 @@ public sealed class DomainRuntime : IDomainRuntime
     }
 
     public async Task<PersistOutcome> CreateBulkAsync(EntityDescriptor entity, IReadOnlyList<object> instances,
-        int chunkSize, CancellationToken ct = default)
+        BulkPersistOptions options, CancellationToken ct = default)
     {
-        // Bulk always goes through the DbContext: AddRange + a single SaveChanges per chunk (handoff §12).
         var binding = BindingFor(entity);
         DbContext ctx;
         try { ctx = ContextFor(binding); }
         catch (InvalidOperationException ex) { return PersistOutcome.Fail(ex.Message); }
 
+        var chunkSize = Math.Max(1, options.ChunkSize);
+
+        // Provider-native path (W3-D3): only for client-set keys — bulk APIs don't propagate
+        // store-generated keys back into the instances (teardown and references need them).
+        if (options.Strategy == BulkStrategy.Provider &&
+            binding.EfType is not null &&
+            !entity.KeyIsDbGenerated && entity.IdStrategy != IdStrategy.DbGenerated &&
+            BulkInserters.For(ctx) is { } inserter)
+        {
+            if (BulkColumns.TryMap(binding.EfType, out var map, out var reason))
+            {
+                var persisted = 0;
+                try
+                {
+                    foreach (var chunk in instances.Chunk(chunkSize))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        await inserter.InsertAsync(ctx, binding.EfType, map!, chunk, ct).ConfigureAwait(false);
+                        persisted += chunk.Length;
+                        TrackBulk(binding, chunk);
+                    }
+                    return PersistOutcome.Ok(inserter.Route);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return PersistOutcome.Fail(
+                        $"{Unwrap(ex)} ({persisted}/{instances.Count} rows persisted before failure)", inserter.Route);
+                }
+            }
+            Log.LogDebug("Bulk create of {Entity}: provider inserter unavailable ({Reason}); using the EF path.",
+                entity.LogicalName, reason);
+        }
+
+        return await CreateBulkEfCoreAsync(binding, ctx, instances, chunkSize, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The portable chunked AddRange+SaveChanges path (v1). The change tracker is
+    /// cleared between chunks so memory stays O(chunk) at any count.</summary>
+    private async Task<PersistOutcome> CreateBulkEfCoreAsync(EntityBinding binding, DbContext ctx,
+        IReadOnlyList<object> instances, int chunkSize, CancellationToken ct)
+    {
         var persisted = 0;
         try
         {
-            foreach (var chunk in instances.Chunk(Math.Max(1, chunkSize)))
+            foreach (var chunk in instances.Chunk(chunkSize))
             {
                 ct.ThrowIfCancellationRequested();
                 ctx.AddRange(chunk);
                 await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
                 persisted += chunk.Length;
-                foreach (var instance in chunk) Track(binding, instance);
+                TrackBulk(binding, chunk);
+                ctx.ChangeTracker.Clear();
             }
             return PersistOutcome.Ok("DbContext(bulk)");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            foreach (var instance in instances.Skip(persisted))
-            {
-                try { ctx.Entry(instance).State = EntityState.Detached; } catch { /* best effort */ }
-            }
+            ctx.ChangeTracker.Clear();
             return PersistOutcome.Fail($"{Unwrap(ex)} ({persisted}/{instances.Count} rows persisted before failure)", "DbContext(bulk)");
         }
     }
@@ -462,6 +524,55 @@ public sealed class DomainRuntime : IDomainRuntime
     {
         if (_lifecycle == LifecycleMode.TrackedTeardown)
             _tracked.Add((binding, instance));
+    }
+
+    private void TrackBulk(EntityBinding binding, IReadOnlyList<object> chunk)
+    {
+        if (_lifecycle != LifecycleMode.TrackedTeardown) return;
+        if (binding.Descriptor.KeyProperty is null || binding.EfType is null)
+        {
+            // No single-column key to delete by — fall back to instance tracking.
+            foreach (var instance in chunk) _tracked.Add((binding, instance));
+            return;
+        }
+
+        if (_trackedBulk.Count == 0 || !ReferenceEquals(_trackedBulk[^1].Binding, binding))
+            _trackedBulk.Add((binding, []));
+        var keys = _trackedBulk[^1].Keys;
+        foreach (var instance in chunk)
+            keys.Add(binding.Descriptor.GetKey(instance)!);
+    }
+
+    /// <summary>Set-based teardown of bulk-created rows: DELETE … WHERE key IN (…), batched.</summary>
+    private async Task<int> DeleteByKeysAsync(EntityBinding binding, List<object> keys, CancellationToken ct)
+    {
+        var ctx = ContextFor(binding);
+        var efType = binding.EfType!;
+        var tableName = efType.GetTableName()
+                        ?? throw new InvalidOperationException($"{binding.Descriptor.LogicalName} is not mapped to a table.");
+        var keyProperty = efType.FindPrimaryKey()!.Properties[0];
+        var helper = ctx.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>();
+        var table = helper.DelimitIdentifier(tableName, efType.GetSchema());
+        var column = helper.DelimitIdentifier(
+            keyProperty.GetColumnName(Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(tableName, efType.GetSchema()))
+            ?? keyProperty.GetColumnName());
+        var converter = keyProperty.GetTypeMapping().Converter;
+
+        var deleted = 0;
+        foreach (var batch in keys.Chunk(500))
+        {
+            ct.ThrowIfCancellationRequested();
+            var placeholders = string.Join(", ", Enumerable.Range(0, batch.Length).Select(i => $"{{{i}}}"));
+            var values = batch.Select(k => converter is null ? k : converter.ConvertToProvider(k)!).ToArray();
+            // Identifiers come from ISqlGenerationHelper over EF metadata and the {n}
+            // placeholders become provider parameters — nothing user-controlled is inlined.
+#pragma warning disable EF1002
+            deleted += await ctx.Database
+                .ExecuteSqlRawAsync($"DELETE FROM {table} WHERE {column} IN ({placeholders})", values, ct)
+                .ConfigureAwait(false);
+#pragma warning restore EF1002
+        }
+        return deleted;
     }
 
     /// <summary>A failed entity must not stay tracked — it would poison every later SaveChanges.</summary>

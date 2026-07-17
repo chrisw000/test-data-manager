@@ -13,7 +13,10 @@ starting point with `tdm init`.
   "defaultSeed": 1,
   "featurePaths": ["features/**/*.feature"],
   "benchmark": false,
-  "bulkChunkSize": 500,              // AddRange+SaveChanges batch size for count-bulk creates
+  "bulkChunkSize": 500,              // bulk generate/persist batch size — `tdm bench tune` measures the best
+  "bulkStrategy": "Provider",        // Provider (SqlBulkCopy / multi-row INSERT) | EfCore (portable AddRange)
+  "manifestBulkValues": "Sample",    // All | Sample | None — manifest detail for count-bulk creates (W3-D4)
+  "manifestBulkSampleRows": 5,       // rows kept with full values at each end in Sample mode
   "maxParallelScenarios": 1,         // >1 runs scenarios concurrently (W3-D1); steps stay sequential
   "outputPath": "./output",          // manifests land here
   "signing": {                       // optional — see docs/audit-and-signing.md
@@ -31,6 +34,11 @@ starting point with `tdm init`.
 - **signing** — every manifest gets a SHA-256 checksum regardless; configuring `signing`
   additionally writes a detached signature (`<manifest>.sig`), verified with
   `tdm manifest verify <file> --cert <public-cert>`.
+- **bulkStrategy / manifestBulkValues** — count-bulk creates stream in O(chunk) memory
+  through provider-native inserters (SqlBulkCopy, SQLite multi-row INSERT) with the EF path
+  as fallback; `Sample` mode keeps manifests usable at a million rows (head/tail values +
+  count + value hash). See
+  [bulk-and-streaming](https://github.com/chrisw000/test-data-manager/blob/main/docs/bulk-and-streaming.md).
 - **maxParallelScenarios** — the scenario is the unit of parallelism; manifests record
   scenarios in plan order regardless of completion order, and per-scenario seeds keep the
   data identical to a serial run. Any domain's own `maxParallelScenarios` caps the run's;
@@ -157,6 +165,7 @@ needed, never overridable.
 | `tdm manifest verify <file> [--cert <public-cert>]` | Check a manifest's checksum and, if present, signature — see [audit-and-signing](https://github.com/chrisw000/test-data-manager/blob/main/docs/audit-and-signing.md) |
 | `tdm replay --manifest <file>` | Re-create exactly the rows a manifest records — final values, not fakers (W2-D9) |
 | `tdm verify --manifest <file>` | Drift check: every recorded row still exists with its recorded values; exit 0/1 |
+| `tdm bench tune [--domain X --entity Y --rows N]` | Measure bulk-insert throughput across chunk sizes; write the best into `run.bulkChunkSize` (W3-D3) |
 
 `--env`, `--policy-file`, `--approval` (on run/validate): environment-policy enforcement —
 see policy as code below.

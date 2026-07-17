@@ -48,6 +48,29 @@ public class ManifestPlaybackTests
     // ---------------------------------------------------------------- Replay
 
     [Fact]
+    public async Task SampledBulkOperations_WarnOnReplayAndVerify_SampledRowsStillPlayBack()
+    {
+        var runtime = Runtime();
+        var id = Guid.NewGuid();
+        var manifest = Manifest(entries: Entry("Create", id, "Sampled-1"));
+        manifest.Scenarios[0].BulkOperations.Add(new BulkOperationManifest
+        {
+            Entity = "Widget", Domain = "Fake", Requested = 1000, Count = 1000,
+            Mode = BulkManifestMode.Sample, SampledRows = 10, HashedRows = 990,
+            ValuesSha256 = "abc123",
+        });
+
+        var replay = await ManifestPlayback.ReplayAsync(manifest, [runtime], ct: Ct);
+        replay.Created.Should().Be(1); // the sampled entry still replays
+        replay.Warnings.Should().ContainSingle().Which.Should()
+            .Contain("1000 Widget").And.Contain("Sample").And.Contain("10 sampled");
+
+        var verify = await ManifestPlayback.VerifyAsync(manifest, [runtime], ct: Ct);
+        verify.Warnings.Should().Contain(w => w.Contains("Sample") && w.Contains("verifiable"));
+        verify.Drift.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Replay_CreatesRowsWithRecordedValues()
     {
         var runtime = Runtime();

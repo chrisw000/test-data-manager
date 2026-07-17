@@ -67,6 +67,16 @@ public sealed class TdmSettings
         Domains.FirstOrDefault(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase));
 }
 
+/// <summary>Bulk-create persistence path (W3-D3). Provider: a provider-native bulk inserter
+/// (SqlBulkCopy, multi-row INSERT) when the entity qualifies, else the EF path. EfCore:
+/// always the portable chunked AddRange+SaveChanges path (v1 behaviour).</summary>
+public enum BulkStrategy { Provider, EfCore }
+
+/// <summary>Manifest detail for count-bulk creates (W3-D4). All: every row's full values
+/// (v1 — unusable at millions of rows). Sample: first/last N rows' full values plus a
+/// count and value-hash of the rest. None: count and value-hash only.</summary>
+public enum BulkManifestMode { All, Sample, None }
+
 public sealed class RunSettings
 {
     public string Name { get; set; } = "tdm-run";
@@ -75,8 +85,15 @@ public sealed class RunSettings
     public int DefaultSeed { get; set; } = 1;
     public List<string> FeaturePaths { get; set; } = [];
     public bool Benchmark { get; set; }
-    /// <summary>Bulk creates are chunked into AddRange + SaveChanges batches of this size (handoff §12).</summary>
+    /// <summary>Bulk creates are generated and persisted in bounded batches of this size —
+    /// memory stays O(chunk) however large the count (W3-D3). `tdm bench tune` measures the
+    /// best value for a target database and writes it here.</summary>
     public int BulkChunkSize { get; set; } = 500;
+    public BulkStrategy BulkStrategy { get; set; } = BulkStrategy.Provider;
+    /// <summary>How much of a count-bulk create the manifest records (W3-D4).</summary>
+    public BulkManifestMode ManifestBulkValues { get; set; } = BulkManifestMode.Sample;
+    /// <summary>Rows kept with full values at each end of a bulk create in Sample mode.</summary>
+    public int ManifestBulkSampleRows { get; set; } = 5;
     /// <summary>Scenarios run concurrently up to this limit (W3-D1); steps within a scenario stay
     /// sequential. 1 (default) preserves strict serial execution. Any domain's
     /// <see cref="DomainSettings.MaxParallelScenarios"/> caps this further.</summary>
