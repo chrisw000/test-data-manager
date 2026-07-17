@@ -6,6 +6,7 @@ using Tdm.Core.Benchmarks;
 using Tdm.Core.Conversion;
 using Tdm.Core.Diagnostics;
 using Tdm.Core.Grammar;
+using Tdm.Core.Journal;
 using Tdm.Core.Manifest;
 using Tdm.Core.Naming;
 using Tdm.Core.Settings;
@@ -17,13 +18,17 @@ namespace Tdm.Core.Execution;
 /// The execution engine (handoff §2): walks a <see cref="SeedingPlan"/>, resolves entities,
 /// generates data, applies overrides and references, routes persistence through the domain
 /// runtimes, and produces the run manifest. Set <c>dryRun</c> for `tdm validate` semantics —
-/// parse + resolve everything, persist nothing.
+/// parse + resolve everything, persist nothing. When a <paramref name="journal"/> is given,
+/// every persisted outcome is eagerly journalled (W3-D6); a <paramref name="resume"/> state
+/// skips work a previous run's journal proves was done.
 /// </summary>
 public sealed class TdmEngine(
     TdmSettings settings,
     IReadOnlyList<IDomainRuntime> domains,
     ILogger<TdmEngine>? logger = null,
-    HttpClient? verifyClient = null)
+    HttpClient? verifyClient = null,
+    RunJournalWriter? journal = null,
+    ResumeState? resume = null)
 {
     private readonly ILogger _log = logger ?? NullLogger<TdmEngine>.Instance;
     private readonly HttpClient _verifyClient = verifyClient ?? new HttpClient();
@@ -32,17 +37,27 @@ public sealed class TdmEngine(
     {
         public required ScenarioPlan Plan { get; init; }
         public required ScenarioManifest Manifest { get; init; }
+        /// <summary>Journal key "{feature}|{scenario}|{line}" — stable across identical plans (W3-D6).</summary>
+        public required string Key { get; init; }
         public required int Seed { get; init; }
         public required bool DeepBenchmark { get; init; }
         public required bool DryRun { get; init; }
         /// <summary>The runtime sessions this scenario executes against — the shared root
         /// instances when serial, per-scenario sessions when parallel (W3-D2).</summary>
         public required IReadOnlyList<IDomainRuntime> Domains { get; init; }
+        /// <summary>Non-null when resuming and this scenario is partially complete with a
+        /// matching seed — ordinals it records persisted skip their persist call.</summary>
+        public ResumeState? Resume { get; init; }
         public ScenarioContextBag Bag { get; } = new();
         public BenchmarkAggregator Bench { get; } = new();
         public int Ordinal;
         public bool Failed;
+
+        public bool IsResumed(int ordinal) => Resume?.IsPersisted(Key, ordinal) == true;
     }
+
+    private static string ScenarioKey(ScenarioManifest manifest) =>
+        $"{manifest.Feature}|{manifest.Scenario}|{manifest.Line}";
 
     public Task<RunManifest> ValidateAsync(SeedingPlan plan, CancellationToken ct = default) =>
         RunAsync(plan, dryRun: true, ct);
@@ -70,6 +85,7 @@ public sealed class TdmEngine(
         using var runActivity = TdmDiagnostics.ActivitySource.StartActivity("run");
         runActivity?.SetTag("tdm.run", settings.Run.Name);
         runActivity?.SetTag("tdm.policy", settings.Run.FailurePolicy.ToString());
+        journal?.RunStarted(settings.Run.Name);
 
         var parallelism = EffectiveParallelism(plan);
         var aborted = parallelism <= 1
@@ -245,6 +261,7 @@ public sealed class TdmEngine(
         var lifecycle = scenario.LifecycleOverride ?? settings.Run.Lifecycle;
         scenarioManifest.Seed = seed;
         scenarioManifest.Lifecycle = lifecycle;
+        var scenarioKey = ScenarioKey(scenarioManifest);
 
         using var activity = TdmDiagnostics.ActivitySource.StartActivity("scenario");
         activity?.SetTag("tdm.scenario", scenario.Name);
@@ -254,19 +271,45 @@ public sealed class TdmEngine(
         if (scenario.Skip)
         {
             scenarioManifest.Outcome = ScenarioOutcome.Skipped;
+            journal?.ScenarioCompleted(scenarioKey, ScenarioOutcome.Skipped);
             _log.LogInformation("Scenario {Scenario} skipped (@skip)", scenario.Name);
             return;
+        }
+
+        // Resume (W3-D6): a scenario the journal records complete is not re-run; the new
+        // journal records it complete too, so a resumed run's journal is itself resumable.
+        if (resume?.IsScenarioComplete(scenarioKey) == true)
+        {
+            scenarioManifest.Outcome = ScenarioOutcome.Skipped;
+            scenarioManifest.Warnings.Add($"Skipped: recorded complete in the resume journal ({resume.JournalPath}).");
+            journal?.ScenarioCompleted(scenarioKey, ScenarioOutcome.Skipped);
+            _log.LogInformation("Scenario {Scenario} skipped — recorded complete in the resume journal", scenario.Name);
+            return;
+        }
+
+        // A partial scenario resumes ordinal-by-ordinal only if the seeds match — ordinal
+        // identities and generated values are seed-derived, so a mismatch means the journal
+        // describes different rows. Re-running everything is safe (idempotent create-or-reuse).
+        var scenarioResume = resume;
+        if (resume?.RecordedSeed(scenarioKey) is { } recordedSeed && recordedSeed != seed)
+        {
+            scenarioManifest.Warnings.Add(
+                $"Resume journal recorded seed {recordedSeed} but this run uses seed {seed} — re-running all steps.");
+            scenarioResume = null;
         }
 
         var state = new ScenarioState
         {
             Plan = scenario,
             Manifest = scenarioManifest,
+            Key = scenarioKey,
             Seed = seed,
             DeepBenchmark = settings.Run.Benchmark || scenario.ForceBenchmark,
             DryRun = dryRun,
             Domains = sessionDomains,
+            Resume = scenarioResume,
         };
+        journal?.ScenarioStarted(scenarioKey, seed);
 
         if (!dryRun)
         {
@@ -316,6 +359,7 @@ public sealed class TdmEngine(
         scenarioManifest.Outcome = state.Failed ? ScenarioOutcome.Failed
             : hasWarnings ? ScenarioOutcome.CompletedWithWarnings
             : ScenarioOutcome.Succeeded;
+        journal?.ScenarioCompleted(scenarioKey, scenarioManifest.Outcome);
     }
 
     private async Task ExecuteStepAsync(ScenarioState state, StepPlan step, CancellationToken ct)
@@ -370,6 +414,16 @@ public sealed class TdmEngine(
                 ApplyOverrides(state, descriptor, instance, overrides, entry);
                 await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
                 ApplyIdentity(state, runtime, descriptor, instance, ordinal, entry);
+
+                // Resume (W3-D6): the journal proves this ordinal was persisted — generation
+                // above still ran (seeded faker sequences must stay aligned), the write is skipped.
+                if (state.IsResumed(ordinal))
+                {
+                    entry.PersistedVia = "resumed";
+                    CompleteCreatedEntry(state, descriptor, instance, entry);
+                    FinishEntry(state, entry, entitySw);
+                    continue;
+                }
 
                 // Idempotent create: the same natural key means the same deterministic identity
                 // (handoff §7), so a pre-existing row is reused rather than collided with —
@@ -495,7 +549,7 @@ public sealed class TdmEngine(
         using var restHash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
         var tail = new Queue<(object Instance, EntityManifest Entry)>();
         var headKept = 0;
-        var chunk = new List<(object Instance, EntityManifest Entry)>(Math.Min(chunkSize, step.Count));
+        var chunk = new List<(object Instance, EntityManifest Entry, bool Resumed)>(Math.Min(chunkSize, step.Count));
 
         for (var i = 0; i < step.Count; i++)
         {
@@ -515,7 +569,10 @@ public sealed class TdmEngine(
                 ApplyOverrides(state, descriptor, instance, step.Overrides, entry);
                 await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
                 ApplyIdentity(state, runtime, descriptor, instance, ordinal, entry);
-                chunk.Add((instance, entry));
+                // Resume (W3-D6): journalled-persisted rows ride the chunk for manifest
+                // sampling but are excluded from the write — re-bulk-inserting them would
+                // collide on their deterministic keys.
+                chunk.Add((instance, entry, state.IsResumed(ordinal)));
             }
             catch (TdmObjectRejectedException ex)
             {
@@ -533,7 +590,7 @@ public sealed class TdmEngine(
         {
             var (_, entry) = tail.Dequeue();
             summary.SampledRows++;
-            FinishEntry(state, entry, sw: null);
+            FinishEntry(state, entry, sw: null, journalEntry: false); // journalled at chunk flush
         }
 
         summary.LastOrdinal = state.Ordinal;
@@ -548,7 +605,7 @@ public sealed class TdmEngine(
 
             if (state.DryRun)
             {
-                foreach (var (instance, entry) in chunk)
+                foreach (var (instance, entry, _) in chunk)
                 {
                     entry.PersistedVia = "dry-run";
                     CompleteCreatedEntry(state, descriptor, instance, entry, addToBag: false);
@@ -560,27 +617,33 @@ public sealed class TdmEngine(
                 return;
             }
 
-            var persistSw = Stopwatch.StartNew();
-            var outcome = await runtime.CreateBulkAsync(descriptor,
-                chunk.Select(c => c.Instance).ToList(), options, ct).ConfigureAwait(false);
-            var ms = persistSw.Elapsed.TotalMilliseconds;
-            state.Bench.Record("create", descriptor.LogicalName, ms);
-            if (state.DeepBenchmark) state.Bench.Record("persist", descriptor.LogicalName, ms);
-            TdmDiagnostics.PersistDuration.Record(ms,
-                new KeyValuePair<string, object?>("entity", descriptor.LogicalName),
-                new KeyValuePair<string, object?>("route", outcome.Route));
+            var toPersist = chunk.Where(c => !c.Resumed).Select(c => c.Instance).ToList();
+            var outcome = PersistOutcome.Ok("resumed");
+            if (toPersist.Count > 0)
+            {
+                var persistSw = Stopwatch.StartNew();
+                outcome = await runtime.CreateBulkAsync(descriptor, toPersist, options, ct).ConfigureAwait(false);
+                var ms = persistSw.Elapsed.TotalMilliseconds;
+                state.Bench.Record("create", descriptor.LogicalName, ms);
+                if (state.DeepBenchmark) state.Bench.Record("persist", descriptor.LogicalName, ms);
+                TdmDiagnostics.PersistDuration.Record(ms,
+                    new KeyValuePair<string, object?>("entity", descriptor.LogicalName),
+                    new KeyValuePair<string, object?>("route", outcome.Route));
+            }
 
             if (!outcome.Success)
             {
-                TdmDiagnostics.EntitiesFailed.Add(chunk.Count);
-                summary.Failed += chunk.Count;
+                TdmDiagnostics.EntitiesFailed.Add(toPersist.Count);
+                summary.Failed += toPersist.Count;
+                summary.Count += chunk.Count - toPersist.Count;
                 summary.PersistedVia ??= outcome.Route;
-                foreach (var (instance, entry) in chunk)
+                foreach (var (instance, entry, resumed) in chunk)
                 {
-                    entry.PersistedVia = outcome.Route;
-                    entry.Warnings.Add(outcome.Error ?? "bulk persist failed");
+                    entry.PersistedVia = resumed ? "resumed" : outcome.Route;
+                    if (!resumed) entry.Warnings.Add(outcome.Error ?? "bulk persist failed");
                     CompleteCreatedEntry(state, descriptor, instance, entry, addToBag: false);
-                    FinishEntry(state, entry, sw: null); // failed rows always keep their entries
+                    JournalEntity(state, entry);
+                    FinishEntry(state, entry, sw: null, journalEntry: false); // failed rows always keep their entries
                 }
                 chunk.Clear();
                 var problem = $"Bulk persist failed for {descriptor.LogicalName}: {outcome.Error}";
@@ -597,14 +660,18 @@ public sealed class TdmEngine(
                 return;
             }
 
-            TdmDiagnostics.EntitiesCreated.Add(chunk.Count,
-                new KeyValuePair<string, object?>("entity", descriptor.LogicalName));
+            if (toPersist.Count > 0)
+            {
+                TdmDiagnostics.EntitiesCreated.Add(toPersist.Count,
+                    new KeyValuePair<string, object?>("entity", descriptor.LogicalName));
+            }
             summary.Count += chunk.Count;
             summary.PersistedVia ??= outcome.Route;
-            foreach (var (instance, entry) in chunk)
+            foreach (var (instance, entry, resumed) in chunk)
             {
-                entry.PersistedVia = outcome.Route;
+                entry.PersistedVia = resumed ? "resumed" : outcome.Route;
                 CompleteCreatedEntry(state, descriptor, instance, entry, addToBag: false);
+                JournalEntity(state, entry);
             }
             RecordChunkEntries();
             chunk.Clear();
@@ -618,12 +685,12 @@ public sealed class TdmEngine(
                 {
                     headKept++;
                     summary.SampledRows++;
-                    FinishEntry(state, item.Entry, sw: null);
+                    FinishEntry(state, item.Entry, sw: null, journalEntry: false);
                     continue;
                 }
                 if (keepTail > 0)
                 {
-                    tail.Enqueue(item);
+                    tail.Enqueue((item.Instance, item.Entry));
                     if (tail.Count > keepTail) HashAndDrop(tail.Dequeue().Entry);
                     continue;
                 }
@@ -707,7 +774,11 @@ public sealed class TdmEngine(
             ApplyOverrides(state, descriptor, instance, step.Overrides, entry);
             await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
 
-            if (!state.DryRun)
+            if (state.IsResumed(entry.Ordinal))
+            {
+                entry.PersistedVia = "resumed"; // journal-proven applied by the interrupted run (W3-D6)
+            }
+            else if (!state.DryRun)
             {
                 var outcome = await TimedPersistAsync(state, descriptor, "update",
                     () => runtime.UpdateAsync(descriptor, instance, ct)).ConfigureAwait(false);
@@ -761,6 +832,13 @@ public sealed class TdmEngine(
             return;
         }
 
+        if (state.IsResumed(entry.Ordinal))
+        {
+            entry.PersistedVia = "resumed"; // journal-proven deleted by the interrupted run (W3-D6)
+            FinishEntry(state, entry, entitySw);
+            return;
+        }
+
         if (step.All)
         {
             var filters = BuildFilters(state, descriptor, step.Filter, step);
@@ -768,6 +846,9 @@ public sealed class TdmEngine(
             var sw = Stopwatch.StartNew();
             var count = await runtime.DeleteWhereAsync(descriptor, filters, ct).ConfigureAwait(false);
             state.Bench.Record("delete", descriptor.LogicalName, sw.Elapsed.TotalMilliseconds);
+            // Journalled as persisted (W3-D6): a resumed run must NOT re-run a delete-all —
+            // it would wipe rows whose re-creation the same resume then skips.
+            entry.PersistedVia = "DbContext(where)";
             entry.Values["deletedCount"] = count.ToString();
             TdmDiagnostics.EntitiesDeleted.Add(count,
                 new KeyValuePair<string, object?>("entity", descriptor.LogicalName));
@@ -1255,13 +1336,25 @@ public sealed class TdmEngine(
         return outcome;
     }
 
-    private void FinishEntry(ScenarioState state, EntityManifest entry, Stopwatch? sw)
+    private void FinishEntry(ScenarioState state, EntityManifest entry, Stopwatch? sw, bool journalEntry = true)
     {
         // Bulk rows carry no per-entity timing — the chunk persist time lives in the
         // benchmark stats and the bulk summary.
         if (sw is not null)
             entry.DurationMs = Math.Round(sw.Elapsed.TotalMilliseconds, 3);
         state.Manifest.Entities.Add(entry);
+        // Bulk rows are journalled at chunk flush (all of them, sampled or not) —
+        // journalEntry: false stops those sampled in the manifest being written twice.
+        if (journalEntry)
+            JournalEntity(state, entry);
+    }
+
+    /// <summary>Journal an entity outcome (W3-D6). "Persisted" means resume may skip it:
+    /// a real persist route, no warnings — dry runs never journal (no writer is passed).</summary>
+    private void JournalEntity(ScenarioState state, EntityManifest entry)
+    {
+        var persisted = entry.PersistedVia is { } via && via != "dry-run" && entry.Warnings.Count == 0;
+        journal?.Entity(state.Key, entry, persisted);
     }
 
     /// <summary>

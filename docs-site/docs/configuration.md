@@ -158,7 +158,7 @@ needed, never overridable.
 |---|---|
 | `tdm init [--domain X --package Y]` | Scaffold settings, starter feature, .gitignore, CI workflow |
 | `tdm validate [--report sarif=…] [--update-plugins]` | Parse + resolve everything, persist nothing; policy gate; exit 0/1/2 |
-| `tdm run [--seed N] [--policy P] [--lifecycle L] [--benchmark] [--report …]` | Seed and write the manifest |
+| `tdm run [--seed N] [--policy P] [--lifecycle L] [--benchmark] [--report …] [--resume <journal>]` | Seed and write the manifest (+ a crash-safe `.tdm.journal.jsonl`; `--resume` skips journal-proven work, W3-D6) |
 | `tdm teardown --manifest <file>` | Delete manifest-recorded rows in reverse order |
 | `tdm list-entities [--domain X]` | Resolved entity → CLR type, keys, faker, write/read repository |
 | `tdm explain "<step text>" [--keyword When]` | Every pipeline decision for one step; no DB connection |
@@ -166,6 +166,8 @@ needed, never overridable.
 | `tdm replay --manifest <file>` | Re-create exactly the rows a manifest records — final values, not fakers (W2-D9) |
 | `tdm verify --manifest <file>` | Drift check: every recorded row still exists with its recorded values; exit 0/1 |
 | `tdm bench tune [--domain X --entity Y --rows N]` | Measure bulk-insert throughput across chunk sizes; write the best into `run.bulkChunkSize` (W3-D3) |
+| `tdm publish --manifest <file> --store <root> [--env E]` | Push a manifest to the trend store (`{env}/{run}/{timestamp}` + index, W3-D7) |
+| `tdm bench compare --manifest <file> (--store <root> \| --baseline <file>) [--env E] [--quarantine] [--report junit=…]` | Judge a run against a rolling-median or pinned baseline; policy perf gates fail the pipeline on regression (W3-D8) |
 
 `--env`, `--policy-file`, `--approval` (on run/validate): environment-policy enforcement —
 see policy as code below.

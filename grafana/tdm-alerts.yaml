@@ -1,0 +1,62 @@
+# Starter alert rules for the TDM metrics (W3-P4) — Grafana unified-alerting provisioning
+# format. Replace <PROMETHEUS_UID> with your Prometheus datasource UID and drop this file
+# into /etc/grafana/provisioning/alerting/ (or import the rules by hand).
+#
+# Thresholds are starting points: persist p95 depends entirely on your database and row
+# shapes — run `tdm bench tune`, look at a week of the dashboard, then set numbers you'd
+# actually page on.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: tdm
+    folder: TDM
+    interval: 1m
+    rules:
+      - uid: tdm-entities-failing
+        title: TDM entities failing
+        condition: threshold
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TDM persist failures in the last 5 minutes"
+          description: "tdm_entities_failed_total is increasing — seeding runs are losing rows. Check the run manifests (warnings carry the persist errors) before the next pipeline consumes this environment."
+        data:
+          - refId: failed
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: <PROMETHEUS_UID>
+            model:
+              expr: sum(increase(tdm_entities_failed_total[5m]))
+              instant: true
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: failed
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      - uid: tdm-persist-p95-high
+        title: TDM persist p95 above budget
+        condition: threshold
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TDM persist p95 above budget for 10 minutes"
+          description: "Persist latency p95 exceeded the budget — the seeding path is degrading. Compare against the trend store (`tdm bench compare`) to see when it started; the same budget should exist as a policy perf gate (W3-D8) so CI catches it first."
+        data:
+          - refId: p95
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: <PROMETHEUS_UID>
+            model:
+              expr: histogram_quantile(0.95, sum by (le) (rate(tdm_persist_duration_milliseconds_bucket[10m])))
+              instant: true
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: p95
+              conditions:
+                - evaluator: { type: gt, params: [250] }

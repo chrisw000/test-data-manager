@@ -86,6 +86,8 @@ public sealed class AttributionInfo
     public bool? GitDirty { get; set; }
     /// <summary>SHA-256 (hex) of tdm.settings.json as loaded — tamper-evidence for the config, not just the data.</summary>
     public string? SettingsFileSha256 { get; set; }
+    /// <summary>Path of the journal this run resumed from (W3-D6), when --resume was used.</summary>
+    public string? ResumedFrom { get; set; }
 }
 
 /// <summary>Classification of the generator sources that produced this run's data (W2-D1).

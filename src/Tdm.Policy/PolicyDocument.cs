@@ -47,6 +47,16 @@ public sealed class EnvironmentPolicy
     /// violations (except key-registry violations, which are never overridable) and is
     /// recorded in the manifest.</summary>
     public PolicyOverride? Override { get; set; }
+    /// <summary>Perf gates (W3-D8) — one enforcement pipeline: perf budgets sit in the same
+    /// policy file as volume caps. Evaluated post-run by `tdm bench compare` against a
+    /// baseline, not by the pre-persistence checks above.</summary>
+    public BenchmarkPolicy? Benchmarks { get; set; }
+}
+
+/// <summary>Perf-gate block (W3-D8): see <see cref="Tdm.Core.Benchmarks.BenchmarkGate"/>.</summary>
+public sealed class BenchmarkPolicy
+{
+    public List<Tdm.Core.Benchmarks.BenchmarkGate> Gates { get; set; } = [];
 }
 
 public sealed class PolicyOverride

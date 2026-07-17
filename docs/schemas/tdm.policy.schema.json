@@ -37,6 +37,35 @@
             "tokenEnv": { "type": "string", "description": "Environment variable holding the token --approval must match." }
           },
           "required": ["kind", "tokenEnv"]
+        },
+        "benchmarks": {
+          "type": "object",
+          "description": "Perf gates (W3-D8), evaluated post-run by `tdm bench compare` against a baseline.",
+          "properties": {
+            "gates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "operation": {
+                    "type": "string",
+                    "description": "Benchmark key: an operation (\"create\") or operation:Entity (\"create:Order\")."
+                  },
+                  "stat": {
+                    "enum": ["meanMs", "p50Ms", "p95Ms", "maxMs", "totalMs"],
+                    "default": "p95Ms"
+                  },
+                  "maxRegressionPct": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 20,
+                    "description": "Fail when the current run exceeds the baseline by more than this percentage."
+                  }
+                },
+                "required": ["operation"]
+              }
+            }
+          }
         }
       },
       "additionalProperties": false

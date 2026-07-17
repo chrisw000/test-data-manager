@@ -35,6 +35,9 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
         descriptors.ToDictionary(d => d.LogicalName, _ => new List<object>());
     public List<string> Calls { get; } = [];
     public bool FailCreates { get; set; }
+    /// <summary>Simulates a mid-flight kill (W3-D6): creates fail once this many rows are in
+    /// the store, so a FailRun policy aborts the run with a partially written journal.</summary>
+    public int? FailCreatesAfterRows { get; set; }
     /// <summary>Simulates losing a same-natural-key race once: the next create fails with a
     /// unique violation while a competing row (same key + id) appears in the store, exactly
     /// as when a parallel scenario's insert lands between the existence check and ours.</summary>
@@ -93,6 +96,8 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
         {
             Calls.Add($"create:{entity.LogicalName}");
             if (FailCreates) return Task.FromResult(PersistOutcome.Fail("boom"));
+            if (FailCreatesAfterRows is { } createLimit && TotalRows() >= createLimit)
+                return Task.FromResult(PersistOutcome.Fail("simulated kill"));
             if (SimulateConcurrentCreateRace)
             {
                 SimulateConcurrentCreateRace = false;
@@ -114,6 +119,8 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
         {
             Calls.Add($"createBulk:{entity.LogicalName}:{instances.Count}");
             if (FailCreates) return Task.FromResult(PersistOutcome.Fail("boom", "FakeStore(bulk)"));
+            if (FailCreatesAfterRows is { } bulkLimit && TotalRows() >= bulkLimit)
+                return Task.FromResult(PersistOutcome.Fail("simulated kill", "FakeStore(bulk)"));
             Rows(entity).AddRange(instances);
             return Task.FromResult(PersistOutcome.Ok("FakeStore(bulk)"));
         }
@@ -190,6 +197,8 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private int TotalRows() => Store.Values.Sum(rows => rows.Count);
 
     private static bool Matches(object row, IReadOnlyList<PropertyFilter> filters) =>
         filters.All(f => Equals(f.Property.GetValue(row), f.Value));

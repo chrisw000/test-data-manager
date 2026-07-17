@@ -43,13 +43,17 @@ var approvalOption = new Option<string?>("--approval")
 {
     Description = "Approval token to override environment-policy violations (W2-D4); validated against the environment's configured secret.",
 };
+var resumeOption = new Option<string?>("--resume")
+{
+    Description = "Path to a previous run's .tdm.journal.jsonl — scenarios/rows it records persisted are skipped (W3-D6). The plan and seeds must match the interrupted run.",
+};
 
 var root = new RootCommand("TDM — Gherkin-driven Test Data Manager");
 
-var runCommand = new Command("run", "Parse feature files, seed data, write the run manifest.")
+var runCommand = new Command("run", "Parse feature files, seed data, write the run manifest (and a crash-safe .tdm.journal.jsonl).")
 {
     settingsOption, seedOption, policyOption, lifecycleOption, benchmarkOption, updatePluginsOption, reportOption,
-    envOption, policyFileOption, approvalOption,
+    envOption, policyFileOption, approvalOption, resumeOption,
 };
 runCommand.SetAction(async (parseResult, ct) =>
 {
@@ -58,7 +62,8 @@ runCommand.SetAction(async (parseResult, ct) =>
         parseResult.GetValue(seedOption), parseResult.GetValue(policyOption),
         parseResult.GetValue(lifecycleOption), parseResult.GetValue(benchmarkOption),
         parseResult.GetValue(updatePluginsOption), parseResult.GetValue(envOption),
-        parseResult.GetValue(policyFileOption)!, parseResult.GetValue(approvalOption));
+        parseResult.GetValue(policyFileOption)!, parseResult.GetValue(approvalOption),
+        parseResult.GetValue(resumeOption));
     return await composer.RunAsync(dryRun: false, reports, ct);
 });
 
@@ -165,6 +170,26 @@ manifestVerifyCommand.SetAction(parseResult =>
 });
 var manifestCommand = new Command("manifest", "Manifest integrity utilities.") { manifestVerifyCommand };
 
+var storeOption = new Option<string>("--store")
+{
+    Description = "Trend store root (W3-D7): a directory path — local, network share, or blob storage mounted/synced by CI.",
+    Required = true,
+};
+var publishCommand = new Command("publish",
+    "Push a manifest to the trend store under {env}/{run-name}/{timestamp}, maintaining index.json (W3-D7). Baselines for `tdm bench compare` read from here.")
+{
+    manifestOption, storeOption, envOption,
+};
+publishCommand.SetAction(async (parseResult, ct) =>
+{
+    var manifest = ManifestWriter.Read(Path.GetFullPath(parseResult.GetValue(manifestOption)!));
+    var environment = parseResult.GetValue(envOption) ?? manifest.Run.Environment ?? "default";
+    var store = new Tdm.Observability.Trends.FileSystemTrendStore(parseResult.GetValue(storeOption)!);
+    var relative = await store.PublishAsync(manifest, environment, ct);
+    Console.WriteLine($"Published: {relative}");
+    return 0;
+});
+
 var tuneEntityOption = new Option<string?>("--entity") { Description = "Entity to bulk-insert (default: first entity with a client-set single-column key)" };
 var tuneRowsOption = new Option<int>("--rows") { Description = "Rows inserted per measurement", DefaultValueFactory = _ => 2000 };
 var tuneChunksOption = new Option<string>("--chunk-sizes")
@@ -186,7 +211,50 @@ benchTuneCommand.SetAction(async (parseResult, ct) =>
         parseResult.GetValue(tuneRowsOption), parseResult.GetValue(tuneChunksOption)!,
         write: !parseResult.GetValue(tuneNoWriteOption), ct);
 });
-var benchCommand = new Command("bench", "Benchmark utilities.") { benchTuneCommand };
+var compareBaselineOption = new Option<string?>("--baseline")
+{
+    Description = "Pinned baseline manifest (.tdm.json). Mutually exclusive with --store.",
+};
+var compareStoreOption = new Option<string?>("--store")
+{
+    Description = "Trend store root (W3-D7): baseline = per-stat rolling median of the last --baseline-runs stored runs for this run name + environment.",
+};
+var baselineRunsOption = new Option<int>("--baseline-runs")
+{
+    Description = "How many stored runs the rolling-median baseline uses",
+    DefaultValueFactory = _ => 5,
+};
+var compareStatOption = new Option<string>("--stat")
+{
+    Description = "Stat shown in the comparison table: meanMs | p50Ms | p95Ms | maxMs | totalMs",
+    DefaultValueFactory = _ => "p95Ms",
+};
+var quarantineOption = new Option<bool>("--quarantine")
+{
+    Description = "Report gate failures without failing the pipeline (noisy-agent escape hatch).",
+};
+var benchCompareCommand = new Command("compare",
+    "Compare a run's benchmark stats against a baseline and evaluate the policy file's perf gates (W3-D8): " +
+    "exit 0 when every gate holds, 2 on regression. Compare before publishing the current manifest to the store.")
+{
+    manifestOption, compareBaselineOption, compareStoreOption, baselineRunsOption,
+    envOption, policyFileOption, compareStatOption, quarantineOption, reportOption,
+};
+benchCompareCommand.SetAction(async (parseResult, ct) =>
+{
+    var reports = ParseReports(parseResult.GetValue(reportOption));
+    return await BenchCompare.ExecuteAsync(
+        parseResult.GetValue(manifestOption)!,
+        parseResult.GetValue(compareBaselineOption),
+        parseResult.GetValue(compareStoreOption),
+        parseResult.GetValue(baselineRunsOption),
+        parseResult.GetValue(envOption),
+        parseResult.GetValue(policyFileOption)!,
+        parseResult.GetValue(compareStatOption)!,
+        parseResult.GetValue(quarantineOption),
+        reports, ct);
+});
+var benchCommand = new Command("bench", "Benchmark utilities.") { benchTuneCommand, benchCompareCommand };
 
 root.Subcommands.Add(runCommand);
 root.Subcommands.Add(validateCommand);
@@ -198,6 +266,7 @@ root.Subcommands.Add(manifestCommand);
 root.Subcommands.Add(replayCommand);
 root.Subcommands.Add(verifyCommand);
 root.Subcommands.Add(benchCommand);
+root.Subcommands.Add(publishCommand);
 
 try
 {
@@ -222,12 +291,13 @@ namespace Tdm.Host
         private readonly string? _environmentName;
         private readonly string _policyFilePath;
         private readonly string? _approvalToken;
+        private readonly string? _resumeJournalPath;
         private readonly Tdm.Core.Secrets.SecretChain _secrets;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _log;
 
         private HostComposer(TdmSettings settings, string settingsFilePath, string baseDirectory, bool updatePlugins,
-            string? environmentName, string policyFilePath, string? approvalToken)
+            string? environmentName, string policyFilePath, string? approvalToken, string? resumeJournalPath)
         {
             _settings = settings;
             _settingsFilePath = settingsFilePath;
@@ -236,6 +306,7 @@ namespace Tdm.Host
             _environmentName = environmentName;
             _policyFilePath = policyFilePath;
             _approvalToken = approvalToken;
+            _resumeJournalPath = resumeJournalPath;
             // Fails fast when settings name a cloud provider without a registered adapter (W2-D8).
             _secrets = Tdm.Core.Secrets.SecretChainFactory.Create(settings.Secrets);
             _loggerFactory = LoggerFactory.Create(builder => builder
@@ -250,7 +321,8 @@ namespace Tdm.Host
 
         public static HostComposer Create(string settingsPath, int? seed, FailurePolicy? policy,
             LifecycleMode? lifecycle, bool? benchmark, bool updatePlugins = false,
-            string? environmentName = null, string policyFilePath = "tdm.policy.json", string? approvalToken = null)
+            string? environmentName = null, string policyFilePath = "tdm.policy.json", string? approvalToken = null,
+            string? resumeJournalPath = null)
         {
             var fullPath = Path.GetFullPath(settingsPath);
             var settings = TdmSettings.Load(fullPath);
@@ -259,7 +331,7 @@ namespace Tdm.Host
             if (lifecycle is { } l) settings.Run.Lifecycle = l;
             if (benchmark is { } b) settings.Run.Benchmark = b;
             return new HostComposer(settings, fullPath, Path.GetDirectoryName(fullPath)!, updatePlugins,
-                environmentName, policyFilePath, approvalToken);
+                environmentName, policyFilePath, approvalToken, resumeJournalPath);
         }
 
         public async Task<int> RunAsync(bool dryRun, CancellationToken ct) =>
@@ -336,7 +408,25 @@ namespace Tdm.Host
                     return 2;
                 }
 
-                var engine = new TdmEngine(_settings, runtimes, _loggerFactory.CreateLogger<TdmEngine>());
+                // Crash-safe JSONL journal (W3-D6): written for every real run, alongside the
+                // end-of-run manifest. --resume replays a previous journal's progress.
+                Tdm.Core.Journal.ResumeState? resumeState = null;
+                if (_resumeJournalPath is not null)
+                {
+                    var resumePath = Path.GetFullPath(_resumeJournalPath, _baseDirectory);
+                    if (!File.Exists(resumePath))
+                        throw new InvalidOperationException($"--resume journal not found: {resumePath}");
+                    resumeState = Tdm.Core.Journal.ResumeState.Load(resumePath);
+                    _log.LogInformation("Resuming from journal {Path}", resumePath);
+                }
+                using var journal = dryRun
+                    ? null
+                    : new Tdm.Core.Journal.RunJournalWriter(JournalPath());
+                if (journal is not null)
+                    _log.LogInformation("Journal: {Path}", journal.FilePath);
+
+                var engine = new TdmEngine(_settings, runtimes, _loggerFactory.CreateLogger<TdmEngine>(),
+                    journal: journal, resume: resumeState);
                 var manifest = await engine.RunAsync(plan, dryRun, ct);
                 manifest.Run.Environment = _environmentName;
                 manifest.Run.RegistryRunId = registry?.RunId?.ToString();
@@ -356,6 +446,7 @@ namespace Tdm.Host
                 // Attribution captured into the manifest itself, not a side file — one audit
                 // artifact, so signing covers it all at once (W2-D1).
                 manifest.Run.Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath);
+                manifest.Run.Attribution.ResumedFrom = resumeState?.JournalPath;
 
                 var manifestFile = await WriteManifestArtifactsAsync(manifest, reports, ct);
                 if (registry is not null)
@@ -397,6 +488,15 @@ namespace Tdm.Host
             var result = Tdm.Policy.PolicyEvaluator.Evaluate(policy, _environmentName, plan, _settings,
                 _approvalToken, Environment.GetEnvironmentVariable);
             return (result.Violations, result.OverrideApplied);
+        }
+
+        /// <summary>Journal file next to where the manifest will land, named like it (W3-D6).</summary>
+        private string JournalPath()
+        {
+            var outputPath = Path.GetFullPath(_settings.Run.OutputPath, _baseDirectory);
+            var safeName = string.Join("-", _settings.Run.Name.Split(Path.GetInvalidFileNameChars(),
+                StringSplitOptions.RemoveEmptyEntries));
+            return Path.Combine(outputPath, $"{safeName}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.tdm.journal.jsonl");
         }
 
         private async Task<string> WriteManifestArtifactsAsync(RunManifest manifest,

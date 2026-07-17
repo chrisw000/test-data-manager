@@ -41,7 +41,8 @@ CLI overrides: `--seed n`, `--policy BestEffort|FailObject|FailRun`,
 | `src/Tdm.Providers.PostgreSql` | PostgreSQL provider plugin: Npgsql bootstrap + binary `COPY` bulk inserter, discovered from a domain's plugin assemblies |
 | `src/Tdm.Plugins` | Isolated `AssemblyLoadContext` per domain, folder-based acquisition (NuGet-feed acquisition is a documented extension point: `IPluginAcquirer`) |
 | `src/Tdm.Observability` | OTLP exporters for the `Tdm` ActivitySource/Meter, manifest writer, run summary |
-| `src/Tdm.Host` | The `tdm` console CLI: `run` \| `teardown` \| `validate` \| `list-entities` |
+| `src/Tdm.Host` | The `tdm` console CLI: `run` (`--resume`) \| `teardown` \| `validate` \| `list-entities` \| `explain` \| `replay` \| `verify` \| `publish` \| `bench tune`/`compare` |
+| `grafana/` | Importable dashboard + starter alert rules for the `Tdm` OTEL metrics |
 | `tests/Acme.Orders.Data.Persistence` | Sample domain plugin, **modern** profile (`{Name}Entity`, repositories, fakers) |
 | `tests/Acme.Billing.Data.Infrastructure` | Sample domain plugin, **legacy** profile (`{Name}Model`, int identity keys, projection read-model, no repositories) |
 | `tests/Tdm.Core.Tests`, `tests/Tdm.EfCore.Tests` | xUnit v3 unit tests |
