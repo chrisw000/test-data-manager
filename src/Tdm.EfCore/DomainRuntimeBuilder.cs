@@ -117,7 +117,7 @@ public static class DomainRuntimeBuilder
         foreach (var warning in warnings)
             logger?.LogWarning("{Warning}", warning);
 
-        return new DomainRuntime(domain, root, assemblies, contextTypes, bindings, warnings, policyViolations, logger);
+        return new DomainRuntime(domain, assemblies, contextTypes, bindings, warnings, policyViolations, logger);
     }
 
     /// <summary>

@@ -35,6 +35,9 @@ public sealed class TdmEngine(
         public required int Seed { get; init; }
         public required bool DeepBenchmark { get; init; }
         public required bool DryRun { get; init; }
+        /// <summary>The runtime sessions this scenario executes against — the shared root
+        /// instances when serial, per-scenario sessions when parallel (W3-D2).</summary>
+        public required IReadOnlyList<IDomainRuntime> Domains { get; init; }
         public ScenarioContextBag Bag { get; } = new();
         public BenchmarkAggregator Bench { get; } = new();
         public int Ordinal;
@@ -68,41 +71,10 @@ public sealed class TdmEngine(
         runActivity?.SetTag("tdm.run", settings.Run.Name);
         runActivity?.SetTag("tdm.policy", settings.Run.FailurePolicy.ToString());
 
-        var aborted = false;
-        foreach (var feature in plan.Features)
-        {
-            using var featureActivity = TdmDiagnostics.ActivitySource.StartActivity("feature");
-            featureActivity?.SetTag("tdm.feature", feature.Name);
-            using var featureScope = _log.BeginScope("Feature {Feature}", feature.Name);
-
-            foreach (var scenario in feature.Scenarios)
-            {
-                ct.ThrowIfCancellationRequested();
-                var scenarioManifest = new ScenarioManifest
-                {
-                    Feature = feature.Name,
-                    FeatureFile = feature.SourcePath,
-                    Scenario = scenario.Name,
-                    Line = scenario.Line,
-                    Tags = scenario.Tags,
-                };
-                manifest.Scenarios.Add(scenarioManifest);
-
-                try
-                {
-                    await ExecuteScenarioAsync(scenario, scenarioManifest, runBench, dryRun, ct).ConfigureAwait(false);
-                }
-                catch (TdmRunAbortedException ex)
-                {
-                    scenarioManifest.Outcome = ScenarioOutcome.Failed;
-                    scenarioManifest.Warnings.Add($"Run aborted (FailRun): {ex.Message}");
-                    _log.LogError(ex, "Run aborted by failure policy in scenario {Scenario}", scenario.Name);
-                    aborted = true;
-                }
-                if (aborted) break;
-            }
-            if (aborted) break;
-        }
+        var parallelism = EffectiveParallelism(plan);
+        var aborted = parallelism <= 1
+            ? await RunSerialAsync(plan, manifest, runBench, dryRun, ct).ConfigureAwait(false)
+            : await RunParallelAsync(plan, manifest, runBench, dryRun, parallelism, ct).ConfigureAwait(false);
 
         manifest.Run.DurationMs = Math.Round(runSw.Elapsed.TotalMilliseconds, 3);
         manifest.Run.Benchmark = runBench.ByOperation();
@@ -125,8 +97,149 @@ public sealed class TdmEngine(
         return manifest;
     }
 
-    private async Task ExecuteScenarioAsync(ScenarioPlan scenario, ScenarioManifest scenarioManifest,
+    /// <summary>Strict plan-order execution on the shared root runtimes — v1 behaviour, byte-for-byte.</summary>
+    private async Task<bool> RunSerialAsync(SeedingPlan plan, RunManifest manifest,
         BenchmarkAggregator runBench, bool dryRun, CancellationToken ct)
+    {
+        var aborted = false;
+        foreach (var feature in plan.Features)
+        {
+            using var featureActivity = TdmDiagnostics.ActivitySource.StartActivity("feature");
+            featureActivity?.SetTag("tdm.feature", feature.Name);
+            using var featureScope = _log.BeginScope("Feature {Feature}", feature.Name);
+
+            foreach (var scenario in feature.Scenarios)
+            {
+                ct.ThrowIfCancellationRequested();
+                var scenarioManifest = new ScenarioManifest
+                {
+                    Feature = feature.Name,
+                    FeatureFile = feature.SourcePath,
+                    Scenario = scenario.Name,
+                    Line = scenario.Line,
+                    Tags = scenario.Tags,
+                };
+                manifest.Scenarios.Add(scenarioManifest);
+
+                try
+                {
+                    await ExecuteScenarioAsync(scenario, scenarioManifest, runBench, dryRun, domains, ct).ConfigureAwait(false);
+                }
+                catch (TdmRunAbortedException ex)
+                {
+                    scenarioManifest.Outcome = ScenarioOutcome.Failed;
+                    scenarioManifest.Warnings.Add($"Run aborted (FailRun): {ex.Message}");
+                    _log.LogError(ex, "Run aborted by failure policy in scenario {Scenario}", scenario.Name);
+                    aborted = true;
+                }
+                if (aborted) break;
+            }
+            if (aborted) break;
+        }
+        return aborted;
+    }
+
+    /// <summary>
+    /// Concurrent scenarios, each on its own set of runtime sessions (W3-D1/W3-D2). Manifests
+    /// are pre-added in plan order, so completion order never changes the record; per-scenario
+    /// seeds keep the generated data identical to a serial run.
+    /// </summary>
+    private async Task<bool> RunParallelAsync(SeedingPlan plan, RunManifest manifest,
+        BenchmarkAggregator runBench, bool dryRun, int parallelism, CancellationToken ct)
+    {
+        var work = new List<(FeaturePlan Feature, ScenarioPlan Scenario, ScenarioManifest Manifest)>();
+        foreach (var feature in plan.Features)
+        {
+            foreach (var scenario in feature.Scenarios)
+            {
+                var scenarioManifest = new ScenarioManifest
+                {
+                    Feature = feature.Name,
+                    FeatureFile = feature.SourcePath,
+                    Scenario = scenario.Name,
+                    Line = scenario.Line,
+                    Tags = scenario.Tags,
+                };
+                manifest.Scenarios.Add(scenarioManifest);
+                work.Add((feature, scenario, scenarioManifest));
+            }
+        }
+
+        var aborted = 0;
+        await Parallel.ForEachAsync(work,
+            new ParallelOptions { MaxDegreeOfParallelism = parallelism, CancellationToken = ct },
+            async (item, token) =>
+            {
+                if (Volatile.Read(ref aborted) != 0)
+                {
+                    // FailRun abort: in-flight scenarios finish, not-yet-started ones are skipped.
+                    item.Manifest.Outcome = ScenarioOutcome.Skipped;
+                    item.Manifest.Warnings.Add("Not run: the run was aborted by a FailRun policy violation.");
+                    return;
+                }
+
+                using var featureActivity = TdmDiagnostics.ActivitySource.StartActivity("feature");
+                featureActivity?.SetTag("tdm.feature", item.Feature.Name);
+                using var featureScope = _log.BeginScope("Feature {Feature}", item.Feature.Name);
+
+                var sessions = new List<IDomainRuntime>(domains.Count);
+                try
+                {
+                    foreach (var domain in domains)
+                        sessions.Add(domain.CreateSession());
+                    await ExecuteScenarioAsync(item.Scenario, item.Manifest, runBench, dryRun, sessions, token).ConfigureAwait(false);
+                }
+                catch (TdmRunAbortedException ex)
+                {
+                    item.Manifest.Outcome = ScenarioOutcome.Failed;
+                    item.Manifest.Warnings.Add($"Run aborted (FailRun): {ex.Message}");
+                    _log.LogError(ex, "Run aborted by failure policy in scenario {Scenario}", item.Scenario.Name);
+                    Volatile.Write(ref aborted, 1);
+                }
+                finally
+                {
+                    foreach (var session in sessions)
+                        await session.DisposeAsync().ConfigureAwait(false);
+                }
+            }).ConfigureAwait(false);
+
+        return aborted != 0;
+    }
+
+    /// <summary>
+    /// run.maxParallelScenarios, capped by every participating domain's own limit. Transactional
+    /// scenarios on SQLite auto-serialise with a warning — SQLite is single-writer, and parallel
+    /// scenarios would hold competing write transactions for their whole lifetime.
+    /// </summary>
+    private int EffectiveParallelism(SeedingPlan plan)
+    {
+        var parallelism = Math.Max(1, settings.Run.MaxParallelScenarios);
+        foreach (var domain in domains)
+        {
+            if (domain.Settings.MaxParallelScenarios is { } cap)
+                parallelism = Math.Min(parallelism, Math.Max(1, cap));
+        }
+
+        if (parallelism > 1)
+        {
+            var transactional = settings.Run.Lifecycle == LifecycleMode.Transactional ||
+                plan.Features.SelectMany(f => f.Scenarios).Any(s => s.LifecycleOverride == LifecycleMode.Transactional);
+            var sqliteDomains = domains
+                .Where(d => string.Equals(d.Settings.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+                .Select(d => d.Name).ToList();
+            if (transactional && sqliteDomains.Count > 0)
+            {
+                _log.LogWarning(
+                    "maxParallelScenarios {Parallelism} requested, but Transactional scenarios on SQLite ({Domains}) are single-writer — running serially.",
+                    parallelism, string.Join(", ", sqliteDomains));
+                parallelism = 1;
+            }
+        }
+        return parallelism;
+    }
+
+    private async Task ExecuteScenarioAsync(ScenarioPlan scenario, ScenarioManifest scenarioManifest,
+        BenchmarkAggregator runBench, bool dryRun, IReadOnlyList<IDomainRuntime> sessionDomains, CancellationToken ct)
     {
         var seed = scenario.Seed ?? settings.Run.DefaultSeed;
         var lifecycle = scenario.LifecycleOverride ?? settings.Run.Lifecycle;
@@ -152,11 +265,12 @@ public sealed class TdmEngine(
             Seed = seed,
             DeepBenchmark = settings.Run.Benchmark || scenario.ForceBenchmark,
             DryRun = dryRun,
+            Domains = sessionDomains,
         };
 
         if (!dryRun)
         {
-            foreach (var domain in domains)
+            foreach (var domain in sessionDomains)
                 await domain.BeginScenarioAsync(lifecycle, seed, ct).ConfigureAwait(false);
         }
 
@@ -180,7 +294,7 @@ public sealed class TdmEngine(
             if (!dryRun)
             {
                 var teardown = new ScenarioTeardown();
-                foreach (var domain in domains)
+                foreach (var domain in sessionDomains)
                 {
                     var close = await domain.EndScenarioAsync(ct).ConfigureAwait(false);
                     teardown.Deleted += close.Deleted;
@@ -297,9 +411,32 @@ public sealed class TdmEngine(
                     entry.PersistedVia = outcome.Route;
                     if (!outcome.Success)
                     {
-                        TdmDiagnostics.EntitiesFailed.Add(1);
-                        entry.Warnings.Add(outcome.Error ?? "persist failed");
-                        ObjectProblem(state, $"Persist failed for {descriptor.LogicalName}: {outcome.Error}");
+                        // A parallel scenario may have won a same-natural-key race after our
+                        // existence check — converge on the winner's row, as the sequential
+                        // create-or-reuse path would have (W3-D1 safety).
+                        var winner = await FindConcurrentWinnerAsync(runtime, descriptor, instance, ct).ConfigureAwait(false);
+                        if (winner is null)
+                        {
+                            TdmDiagnostics.EntitiesFailed.Add(1);
+                            entry.Warnings.Add(outcome.Error ?? "persist failed");
+                            ObjectProblem(state, $"Persist failed for {descriptor.LogicalName}: {outcome.Error}");
+                            FinishEntry(state, entry, entitySw);
+                            continue;
+                        }
+
+                        entry.PersistedVia = "already-existed (concurrent create)";
+                        if (overrides.Count > 0)
+                        {
+                            entry.OverridesApplied.Clear();
+                            ApplyOverrides(state, descriptor, winner, overrides, entry);
+                            var reapply = await TimedPersistAsync(state, descriptor, "update",
+                                () => runtime.UpdateAsync(descriptor, winner, ct)).ConfigureAwait(false);
+                            if (reapply.Success)
+                                entry.PersistedVia = $"already-existed (concurrent create; updated via {reapply.Route})";
+                            else
+                                entry.Warnings.Add($"reapplying declared values failed: {reapply.Error}");
+                        }
+                        CompleteCreatedEntry(state, descriptor, winner, entry);
                         FinishEntry(state, entry, entitySw);
                         continue;
                     }
@@ -351,6 +488,25 @@ public sealed class TdmEngine(
                     CompleteCreatedEntry(state, descriptor, instance, entry);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// After a failed create: the row a concurrent scenario persisted under this instance's
+    /// natural key, if one now exists. Non-null only when a same-key race was genuinely lost —
+    /// the pre-persist existence check already returned nothing.
+    /// </summary>
+    private static async Task<object?> FindConcurrentWinnerAsync(IDomainRuntime runtime,
+        EntityDescriptor descriptor, object instance, CancellationToken ct)
+    {
+        if (descriptor.GetNaturalKey(instance) is not { Length: > 0 } naturalKey) return null;
+        try
+        {
+            return await runtime.FindByNaturalKeyAsync(descriptor, naturalKey, ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            return null; // non-unique or unqueryable key — keep the original failure
         }
     }
 
@@ -657,6 +813,15 @@ public sealed class TdmEngine(
                     entry.PersistedVia = outcome.Route;
                     if (!outcome.Success)
                     {
+                        // Two parallel scenarios can project the same external row (W3-D1 safety).
+                        var winner = await FindConcurrentWinnerAsync(runtime, projection, instance, ct).ConfigureAwait(false);
+                        if (winner is not null)
+                        {
+                            entry.PersistedVia = "already-existed (concurrent create)";
+                            CompleteCreatedEntry(state, projection, winner, entry);
+                            FinishEntry(state, entry, entitySw);
+                            return;
+                        }
                         entry.Warnings.Add(outcome.Error ?? "projection persist failed");
                         ObjectProblem(state, $"Projection persist failed for {projection.LogicalName}: {outcome.Error}");
                     }
@@ -688,11 +853,11 @@ public sealed class TdmEngine(
             var pinned = domain ?? state.Plan.DomainPin;
             if (pinned is not null)
             {
-                var runtime = domains.FirstOrDefault(d =>
+                var runtime = state.Domains.FirstOrDefault(d =>
                     string.Equals(d.Name, pinned, StringComparison.OrdinalIgnoreCase));
                 if (runtime is null)
                 {
-                    StepProblem(state, step, $"Domain '{pinned}' is not configured. Known domains: {string.Join(", ", domains.Select(d => d.Name))}.");
+                    StepProblem(state, step, $"Domain '{pinned}' is not configured. Known domains: {string.Join(", ", state.Domains.Select(d => d.Name))}.");
                     return null;
                 }
                 if (!runtime.TryResolveEntity(entityName, out var descriptor, out var error))
@@ -705,7 +870,7 @@ public sealed class TdmEngine(
 
             var matches = new List<(IDomainRuntime, EntityDescriptor)>();
             var errors = new List<string>();
-            foreach (var runtime in domains)
+            foreach (var runtime in state.Domains)
             {
                 if (runtime.TryResolveEntity(entityName, out var descriptor, out var error))
                     matches.Add((runtime, descriptor!));
@@ -720,7 +885,7 @@ public sealed class TdmEngine(
                 case 0:
                     StepProblem(state, step, errors.Count > 0
                         ? string.Join(" ", errors)
-                        : $"Entity '{entityName}' not found in any configured domain ({string.Join(", ", domains.Select(d => d.Name))}).");
+                        : $"Entity '{entityName}' not found in any configured domain ({string.Join(", ", state.Domains.Select(d => d.Name))}).");
                     return null;
                 default:
                     StepProblem(state, step,

@@ -13,3 +13,5 @@ plugins/
 .idea/
 TestResults/
 artifacts/
+# mkdocs build output (built by the docs workflow)
+docs-site/site/

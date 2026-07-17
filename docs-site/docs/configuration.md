@@ -14,6 +14,7 @@ starting point with `tdm init`.
   "featurePaths": ["features/**/*.feature"],
   "benchmark": false,
   "bulkChunkSize": 500,              // AddRange+SaveChanges batch size for count-bulk creates
+  "maxParallelScenarios": 1,         // >1 runs scenarios concurrently (W3-D1); steps stay sequential
   "outputPath": "./output",          // manifests land here
   "signing": {                       // optional — see docs/audit-and-signing.md
     "certificatePath": "./keys/tdm-signing.pfx",
@@ -30,6 +31,12 @@ starting point with `tdm init`.
 - **signing** — every manifest gets a SHA-256 checksum regardless; configuring `signing`
   additionally writes a detached signature (`<manifest>.sig`), verified with
   `tdm manifest verify <file> --cert <public-cert>`.
+- **maxParallelScenarios** — the scenario is the unit of parallelism; manifests record
+  scenarios in plan order regardless of completion order, and per-scenario seeds keep the
+  data identical to a serial run. Any domain's own `maxParallelScenarios` caps the run's;
+  Transactional scenarios on SQLite auto-serialise with a warning (single-writer). Best for
+  disjoint seeding — see
+  [parallel-execution](https://github.com/chrisw000/test-data-manager/blob/main/docs/parallel-execution.md).
 
 ## plugins
 
@@ -64,7 +71,8 @@ TDM handles no secrets.
   "persistence": "RepositoryFirst",           // RepositoryFirst | DbContextOnly | RepositoryOnly
   "externalReferences": "Synthesize",         // Synthesize | Verify | Trust
   "verifyEndpoint": "https://crm/api/{entity}/{id}",  // Verify mode URL template
-  "ensureCreated": true                       // create schema on first use — local/demo only
+  "ensureCreated": true,                      // create schema on first use — local/demo only
+  "maxParallelScenarios": 1                   // optional cap on run.maxParallelScenarios for this domain
 }]
 ```
 

@@ -35,6 +35,17 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
         descriptors.ToDictionary(d => d.LogicalName, _ => new List<object>());
     public List<string> Calls { get; } = [];
     public bool FailCreates { get; set; }
+    /// <summary>Simulates losing a same-natural-key race once: the next create fails with a
+    /// unique violation while a competing row (same key + id) appears in the store, exactly
+    /// as when a parallel scenario's insert lands between the existence check and ours.</summary>
+    public bool SimulateConcurrentCreateRace { get; set; }
+
+    // Parallel scenarios (W3-D1) hit the fake concurrently — mutations are locked like a
+    // real database serialises writes.
+    private readonly Lock _sync = new();
+
+    /// <summary>The fake has no per-scenario state; its store stands in for the shared database.</summary>
+    public IDomainRuntime CreateSession() => this;
 
     public static EntityDescriptor Describe<T>(string logicalName, string domain, string naturalKey = "Name") => new()
     {
@@ -60,13 +71,13 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
 
     public Task BeginScenarioAsync(LifecycleMode lifecycle, int seed, CancellationToken ct = default)
     {
-        Calls.Add($"begin:{lifecycle}:{seed}");
+        lock (_sync) Calls.Add($"begin:{lifecycle}:{seed}");
         return Task.CompletedTask;
     }
 
     public Task<ScenarioCloseOutcome> EndScenarioAsync(CancellationToken ct = default)
     {
-        Calls.Add("end");
+        lock (_sync) Calls.Add("end");
         return Task.FromResult(new ScenarioCloseOutcome());
     }
 
@@ -78,48 +89,77 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
 
     public Task<PersistOutcome> CreateAsync(EntityDescriptor entity, object instance, bool forceDbContext = false, CancellationToken ct = default)
     {
-        Calls.Add($"create:{entity.LogicalName}");
-        if (FailCreates) return Task.FromResult(PersistOutcome.Fail("boom"));
-        Rows(entity).Add(instance);
-        return Task.FromResult(PersistOutcome.Ok("FakeStore"));
+        lock (_sync)
+        {
+            Calls.Add($"create:{entity.LogicalName}");
+            if (FailCreates) return Task.FromResult(PersistOutcome.Fail("boom"));
+            if (SimulateConcurrentCreateRace)
+            {
+                SimulateConcurrentCreateRace = false;
+                var competitor = Activator.CreateInstance(entity.ClrType)!;
+                entity.NaturalKeyProperty?.SetValue(competitor, entity.GetNaturalKey(instance));
+                if (entity.KeyProperty is not null)
+                    entity.KeyProperty.SetValue(competitor, entity.GetKey(instance));
+                Rows(entity).Add(competitor);
+                return Task.FromResult(PersistOutcome.Fail("UNIQUE constraint failed (simulated concurrent create)"));
+            }
+            Rows(entity).Add(instance);
+            return Task.FromResult(PersistOutcome.Ok("FakeStore"));
+        }
     }
 
     public Task<PersistOutcome> CreateBulkAsync(EntityDescriptor entity, IReadOnlyList<object> instances, int chunkSize, CancellationToken ct = default)
     {
-        Calls.Add($"createBulk:{entity.LogicalName}:{instances.Count}");
-        Rows(entity).AddRange(instances);
-        return Task.FromResult(PersistOutcome.Ok("FakeStore(bulk)"));
+        lock (_sync)
+        {
+            Calls.Add($"createBulk:{entity.LogicalName}:{instances.Count}");
+            Rows(entity).AddRange(instances);
+            return Task.FromResult(PersistOutcome.Ok("FakeStore(bulk)"));
+        }
     }
 
     public Task<PersistOutcome> UpdateAsync(EntityDescriptor entity, object instance, CancellationToken ct = default)
     {
-        Calls.Add($"update:{entity.LogicalName}");
+        lock (_sync) Calls.Add($"update:{entity.LogicalName}");
         return Task.FromResult(PersistOutcome.Ok("FakeStore"));
     }
 
     public Task<PersistOutcome> DeleteAsync(EntityDescriptor entity, object instance, CancellationToken ct = default)
     {
-        Calls.Add($"delete:{entity.LogicalName}");
-        Rows(entity).Remove(instance);
-        return Task.FromResult(PersistOutcome.Ok("FakeStore"));
+        lock (_sync)
+        {
+            Calls.Add($"delete:{entity.LogicalName}");
+            Rows(entity).Remove(instance);
+            return Task.FromResult(PersistOutcome.Ok("FakeStore"));
+        }
     }
 
     public Task<int> DeleteWhereAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default)
     {
-        var matches = Rows(entity).Where(row => Matches(row, filters)).ToList();
-        foreach (var row in matches) Rows(entity).Remove(row);
-        return Task.FromResult(matches.Count);
+        lock (_sync)
+        {
+            var matches = Rows(entity).Where(row => Matches(row, filters)).ToList();
+            foreach (var row in matches) Rows(entity).Remove(row);
+            return Task.FromResult(matches.Count);
+        }
     }
 
-    public Task<object?> FindByNaturalKeyAsync(EntityDescriptor entity, string naturalKey, CancellationToken ct = default) =>
-        Task.FromResult(Rows(entity).FirstOrDefault(row => entity.GetNaturalKey(row) == naturalKey));
+    public Task<object?> FindByNaturalKeyAsync(EntityDescriptor entity, string naturalKey, CancellationToken ct = default)
+    {
+        lock (_sync) return Task.FromResult(Rows(entity).FirstOrDefault(row => entity.GetNaturalKey(row) == naturalKey));
+    }
 
-    public Task<object?> FindByIdAsync(EntityDescriptor entity, string id, CancellationToken ct = default) =>
-        Task.FromResult(Rows(entity).FirstOrDefault(row =>
-            string.Equals(Convert.ToString(entity.GetKey(row), CultureInfo.InvariantCulture), id, StringComparison.OrdinalIgnoreCase)));
+    public Task<object?> FindByIdAsync(EntityDescriptor entity, string id, CancellationToken ct = default)
+    {
+        lock (_sync)
+            return Task.FromResult(Rows(entity).FirstOrDefault(row =>
+                string.Equals(Convert.ToString(entity.GetKey(row), CultureInfo.InvariantCulture), id, StringComparison.OrdinalIgnoreCase)));
+    }
 
-    public Task<int> CountAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default) =>
-        Task.FromResult(Rows(entity).Count(row => Matches(row, filters)));
+    public Task<int> CountAsync(EntityDescriptor entity, IReadOnlyList<PropertyFilter> filters, CancellationToken ct = default)
+    {
+        lock (_sync) return Task.FromResult(Rows(entity).Count(row => Matches(row, filters)));
+    }
 
     public bool TrySetReference(object instance, EntityDescriptor entity, string referencedEntityName,
         EntityDescriptor? referencedDescriptor, object? referencedInstance, object? referencedId, out string? error)
@@ -138,11 +178,14 @@ public sealed class FakeDomainRuntime(string name, params EntityDescriptor[] des
     public Task<bool> DeleteByIdAsync(string logicalEntityName, string id, CancellationToken ct = default)
     {
         TryResolveEntity(logicalEntityName, out var entity, out _);
-        var row = Rows(entity!).FirstOrDefault(r =>
-            string.Equals(Convert.ToString(entity!.GetKey(r), CultureInfo.InvariantCulture), id, StringComparison.OrdinalIgnoreCase));
-        if (row is null) return Task.FromResult(false);
-        Rows(entity!).Remove(row);
-        return Task.FromResult(true);
+        lock (_sync)
+        {
+            var row = Rows(entity!).FirstOrDefault(r =>
+                string.Equals(Convert.ToString(entity!.GetKey(r), CultureInfo.InvariantCulture), id, StringComparison.OrdinalIgnoreCase));
+            if (row is null) return Task.FromResult(false);
+            Rows(entity!).Remove(row);
+            return Task.FromResult(true);
+        }
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

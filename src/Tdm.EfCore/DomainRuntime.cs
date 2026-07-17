@@ -33,18 +33,62 @@ internal sealed class EntityBinding
 }
 
 /// <summary>
+/// The build-once, immutable half of a domain (W3-D2): EF model output, entity/repository/
+/// faker bindings, warnings and policy findings — everything expensive, shared by all
+/// sessions. Schema creation happens exactly once across sessions.
+/// </summary>
+internal sealed class DomainRuntimeCore(DomainSettings settings, IReadOnlyList<Assembly> assemblies,
+    IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings,
+    List<string> warnings, List<string> policyViolations, ILogger log)
+{
+    public DomainSettings Settings { get; } = settings;
+    public IReadOnlyList<Assembly> Assemblies { get; } = assemblies;
+    public IReadOnlyList<Type> ContextTypes { get; } = contextTypes;
+    public List<EntityBinding> Bindings { get; } = bindings;
+    public List<string> Warnings { get; } = warnings;
+    public List<string> PolicyViolations { get; } = policyViolations;
+    public ILogger Log { get; } = log;
+    public IReadOnlyList<EntityDescriptor> Entities { get; } = bindings.Select(b => b.Descriptor).ToList();
+
+    private readonly Lock _schemaLock = new();
+    private bool _schemaEnsured;
+
+    /// <summary>Parallel first sessions race to create the schema — only one may run CreateTables.</summary>
+    public void EnsureSchemaOnce(IEnumerable<DbContext> contexts)
+    {
+        if (_schemaEnsured) return;
+        lock (_schemaLock)
+        {
+            if (_schemaEnsured) return;
+            foreach (var ctx in contexts) EnsureSchema(ctx);
+            _schemaEnsured = true;
+        }
+    }
+
+    // EnsureCreated alone is not enough when multiple contexts share one database:
+    // it no-ops as soon as any tables exist, leaving later contexts' tables missing.
+    private static void EnsureSchema(DbContext ctx)
+    {
+        var creator = ctx.Database.GetService<IRelationalDatabaseCreator>();
+        if (!creator.Exists()) creator.Create();
+        try { creator.CreateTables(); }
+        catch (Exception)
+        {
+            // This context's tables (or some of them) already exist — expected on reuse.
+        }
+    }
+}
+
+/// <summary>
 /// The EF-backed implementation of <see cref="IDomainRuntime"/>: owns per-scenario DbContexts,
 /// transactions, tracked-teardown bookkeeping, repository service provider and faker instances.
-/// Contexts are created fresh per scenario and disposed at scenario end.
+/// Contexts are created fresh per scenario and disposed at scenario end. One instance is one
+/// execution session over a shared immutable <see cref="DomainRuntimeCore"/> (W3-D2); parallel
+/// scenarios each run on their own <see cref="CreateSession"/> instance.
 /// </summary>
 public sealed class DomainRuntime : IDomainRuntime
 {
-    private readonly TdmSettings _root;
-    private readonly IReadOnlyList<Assembly> _assemblies;
-    private readonly IReadOnlyList<Type> _contextTypes;
-    private readonly List<EntityBinding> _bindings;
-    private readonly List<string> _warnings;
-    private readonly ILogger _log;
+    private readonly DomainRuntimeCore _core;
 
     // Per-scenario state.
     private readonly Dictionary<Type, DbContext> _contexts = [];
@@ -55,28 +99,27 @@ public sealed class DomainRuntime : IDomainRuntime
     private ServiceProvider? _repositories;
     private Faker _autoFaker = new();
     private LifecycleMode _lifecycle = LifecycleMode.Persistent;
-    private bool _schemaEnsured;
 
-    internal DomainRuntime(DomainSettings settings, TdmSettings root, IReadOnlyList<Assembly> assemblies,
+    internal DomainRuntime(DomainSettings settings, IReadOnlyList<Assembly> assemblies,
         IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings, List<string> warnings,
         List<string> policyViolations, ILogger? logger)
+        : this(new DomainRuntimeCore(settings, assemblies, contextTypes, bindings, warnings,
+            policyViolations, logger ?? NullLogger.Instance))
     {
-        Settings = settings;
-        _root = root;
-        _assemblies = assemblies;
-        _contextTypes = contextTypes;
-        _bindings = bindings;
-        _warnings = warnings;
-        PolicyViolations = policyViolations;
-        _log = logger ?? NullLogger.Instance;
-        Entities = bindings.Select(b => b.Descriptor).ToList();
     }
 
-    public string Name => Settings.Name;
-    public DomainSettings Settings { get; }
-    public IReadOnlyList<EntityDescriptor> Entities { get; }
-    public IReadOnlyList<string> Warnings => _warnings;
-    public IReadOnlyList<string> PolicyViolations { get; }
+    private DomainRuntime(DomainRuntimeCore core) => _core = core;
+
+    public IDomainRuntime CreateSession() => new DomainRuntime(_core);
+
+    public string Name => _core.Settings.Name;
+    public DomainSettings Settings => _core.Settings;
+    public IReadOnlyList<EntityDescriptor> Entities => _core.Entities;
+    public IReadOnlyList<string> Warnings => _core.Warnings;
+    public IReadOnlyList<string> PolicyViolations => _core.PolicyViolations;
+
+    private List<EntityBinding> Bindings => _core.Bindings;
+    private ILogger Log => _core.Log;
 
     // ---------------------------------------------------------------- Resolution
 
@@ -84,7 +127,7 @@ public sealed class DomainRuntime : IDomainRuntime
     {
         entity = null;
         error = null;
-        var matches = _bindings.Where(b => NameMatcher.Matches(gherkinName, b.Descriptor.LogicalName)).ToList();
+        var matches = Bindings.Where(b => NameMatcher.Matches(gherkinName, b.Descriptor.LogicalName)).ToList();
         switch (matches.Count)
         {
             case 1:
@@ -100,7 +143,7 @@ public sealed class DomainRuntime : IDomainRuntime
     }
 
     public IReadOnlyList<EntityResolutionInfo> DescribeEntities() =>
-        _bindings.Select(b => new EntityResolutionInfo(
+        Bindings.Select(b => new EntityResolutionInfo(
             b.Descriptor.LogicalName,
             b.Descriptor.ClrType.FullName ?? b.Descriptor.ClrType.Name,
             b.Descriptor.NaturalKeyProperty?.Name,
@@ -122,7 +165,7 @@ public sealed class DomainRuntime : IDomainRuntime
     };
 
     private EntityBinding BindingFor(EntityDescriptor descriptor) =>
-        _bindings.First(b => ReferenceEquals(b.Descriptor, descriptor));
+        Bindings.First(b => ReferenceEquals(b.Descriptor, descriptor));
 
     // ---------------------------------------------------------------- Lifecycle
 
@@ -146,7 +189,7 @@ public sealed class DomainRuntime : IDomainRuntime
             var services = new ServiceCollection();
             foreach (var (type, ctx) in _contexts)
                 services.AddSingleton(type, ctx);
-            foreach (var binding in _bindings.Where(b => b.Repository is not null))
+            foreach (var binding in Bindings.Where(b => b.Repository is not null))
                 services.TryAddRepository(binding.Repository!);
             _repositories = services.BuildServiceProvider();
         }
@@ -189,7 +232,7 @@ public sealed class DomainRuntime : IDomainRuntime
                             var key = binding.Descriptor.GetNaturalKey(instance)
                                       ?? Convert.ToString(binding.Descriptor.GetKey(instance), CultureInfo.InvariantCulture);
                             outcome.Orphaned.Add($"{Name}.{binding.Descriptor.LogicalName}:{key} — {ex.Message}");
-                            _log.LogWarning(ex, "Teardown failed for {Entity} {Key}; row left orphaned",
+                            Log.LogWarning(ex, "Teardown failed for {Entity} {Key}; row left orphaned",
                                 binding.Descriptor.LogicalName, key);
                         }
                     }
@@ -218,27 +261,10 @@ public sealed class DomainRuntime : IDomainRuntime
     private void EnsureContexts()
     {
         if (_contexts.Count > 0) return;
-        foreach (var contextType in _contextTypes)
-        {
-            var ctx = DbContextActivator.Activate(contextType, Settings, _assemblies);
-            if (Settings.EnsureCreated && !_schemaEnsured)
-                EnsureSchema(ctx);
-            _contexts[contextType] = ctx;
-        }
-        _schemaEnsured = true;
-    }
-
-    // EnsureCreated alone is not enough when multiple contexts share one database:
-    // it no-ops as soon as any tables exist, leaving later contexts' tables missing.
-    private static void EnsureSchema(DbContext ctx)
-    {
-        var creator = ctx.Database.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalDatabaseCreator>();
-        if (!creator.Exists()) creator.Create();
-        try { creator.CreateTables(); }
-        catch (Exception)
-        {
-            // This context's tables (or some of them) already exist — expected on reuse.
-        }
+        foreach (var contextType in _core.ContextTypes)
+            _contexts[contextType] = DbContextActivator.Activate(contextType, Settings, _core.Assemblies);
+        if (Settings.EnsureCreated)
+            _core.EnsureSchemaOnce(_contexts.Values);
     }
 
     private DbContext ContextFor(EntityBinding binding)
@@ -465,7 +491,7 @@ public sealed class DomainRuntime : IDomainRuntime
         {
             // Unresolvable constructor dependencies → warn once, fall back to DbContext (handoff §5.2).
             _repoResolutionFailures.Add(binding.Repository.InterfaceType);
-            _log.LogWarning("Repository {Repository} could not be constructed ({Message}); falling back to DbContext persistence.",
+            Log.LogWarning("Repository {Repository} could not be constructed ({Message}); falling back to DbContext persistence.",
                 binding.Repository.ImplementationType.Name, ex.Message);
             return (null, null);
         }

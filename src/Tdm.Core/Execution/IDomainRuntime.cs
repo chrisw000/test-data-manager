@@ -48,6 +48,16 @@ public interface IDomainRuntime : IAsyncDisposable
 
     IReadOnlyList<EntityResolutionInfo> DescribeEntities();
 
+    /// <summary>
+    /// Creates an independent execution session over this runtime's immutable bindings (W3-D2):
+    /// the expensive parts (EF model, entity/repository/faker bindings) are built once and
+    /// shared; per-scenario state (contexts, transactions, faker instances, tracked rows) is
+    /// per session. Parallel scenarios each get their own session; at
+    /// <c>maxParallelScenarios: 1</c> the engine uses this instance directly, so serial
+    /// behaviour is unchanged. The caller owns the returned session's disposal.
+    /// </summary>
+    IDomainRuntime CreateSession();
+
     Task BeginScenarioAsync(LifecycleMode lifecycle, int seed, CancellationToken ct = default);
 
     /// <summary>Commits/rolls back/tears down per the scenario's lifecycle mode.</summary>

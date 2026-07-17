@@ -77,6 +77,10 @@ public sealed class RunSettings
     public bool Benchmark { get; set; }
     /// <summary>Bulk creates are chunked into AddRange + SaveChanges batches of this size (handoff §12).</summary>
     public int BulkChunkSize { get; set; } = 500;
+    /// <summary>Scenarios run concurrently up to this limit (W3-D1); steps within a scenario stay
+    /// sequential. 1 (default) preserves strict serial execution. Any domain's
+    /// <see cref="DomainSettings.MaxParallelScenarios"/> caps this further.</summary>
+    public int MaxParallelScenarios { get; set; } = 1;
     public string OutputPath { get; set; } = "./output";
     /// <summary>Optional detached-signature manifest signing (W2-D2). A SHA-256 checksum is
     /// always written next to the manifest regardless of whether this is configured.</summary>
@@ -180,6 +184,9 @@ public sealed class DomainSettings
     public string? VerifyEndpoint { get; set; }
     /// <summary>Create the schema on first use (EnsureCreated). For local/demo databases only.</summary>
     public bool EnsureCreated { get; set; }
+    /// <summary>Caps <see cref="RunSettings.MaxParallelScenarios"/> when this domain participates
+    /// in a run — a fragile database serialises the whole run without touching run settings.</summary>
+    public int? MaxParallelScenarios { get; set; }
 
     public string ResolveConnectionString()
     {
