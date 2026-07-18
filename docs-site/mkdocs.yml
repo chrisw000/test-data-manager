@@ -63,6 +63,13 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path: ['docs-site/snippets', 'snippets']
       check_paths: true
+  # Mermaid diagrams render client-side from Material's bundled copy — no CDN, matching
+  # the zero-external-dependency posture (W5-D1).
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
 extra_css:
   - assets/interactive/pipeline-walkthrough.css

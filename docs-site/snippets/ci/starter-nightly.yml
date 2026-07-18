@@ -1,0 +1,40 @@
+name: TDM nightly seed and verify
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seed-and-verify:
+    runs-on: ubuntu-latest
+    environment: shared-dev   # gate the run behind the environment's reviewers/secrets
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install TDM
+        run: dotnet tool install --global Tdm.Tool
+
+      # Seeds the environment; uploads the manifest + HTML report as the run's flight record.
+      - name: Seed
+        uses: chrisw000/test-data-manager/.github/actions/tdm@main
+        with:
+          command: run
+          settings: tdm.settings.json
+          report-html: output/tdm-run-report.html
+        env:
+          # connectionStringName: "OrdersDb" in settings resolves from this variable.
+          TDM_CONNECTIONSTRINGS__ORDERSDB: ${{ secrets.ORDERS_DB }}
+
+      # Prove the seed landed intact before anyone relies on it.
+      - name: Verify the seeded rows
+        run: |
+          manifest=$(ls -t output/*.tdm.json | head -n 1)
+          tdm verify --manifest "$manifest"

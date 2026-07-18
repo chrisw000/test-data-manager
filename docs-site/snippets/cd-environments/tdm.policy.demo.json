@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/chrisw000/test-data-manager/main/docs/schemas/tdm.policy.schema.json",
+  "policyVersion": 1,
+  "environments": {
+    "shared-dev": {
+      "allowedLifecycles": ["Persistent", "TrackedTeardown"],
+      "requireFailurePolicyAtLeast": "BestEffort",
+      "maxBulkRowsPerStep": 1000,
+      "connectionStringSources": ["inline", "env"],
+      "override": { "kind": "approvalToken", "tokenEnv": "TDM_APPROVAL_SHARED_DEV" }
+    },
+    "prod-like": {
+      "allowedLifecycles": ["TrackedTeardown"],
+      "requireFailurePolicyAtLeast": "FailRun",
+      "maxBulkRowsPerStep": 100,
+      "maxCreatedRowsPerRun": 500,
+      "connectionStringSources": ["env"],
+      "bannedEntities": ["CustomerSummary"],
+      "requiredTags": ["@seed:"]
+    }
+  }
+}
