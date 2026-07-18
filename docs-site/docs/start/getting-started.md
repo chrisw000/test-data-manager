@@ -100,8 +100,13 @@ Resolution  : Orders.Order → Acme.Orders.Data.Persistence.Domain.OrderEntity
   faker       : auto
   persist via : IOrderRepository.AddOrder
   read repo   : IOrderRepository → OrderRepository
-Identity    : no natural-key value in this step — derived at run time from the generated/overridden natural key.
+Identity    : Orders|Order|ORD-GS-1
+  uuid v5     : f27689f8-22e7-5df9-9d0d-1ec9c74de46e
 ```
+
+That last pair of lines is the [identity contract](concepts.md#the-identity-contract) at
+work: the step names the natural key (`order number "ORD-GS-1"`), so the row's id is
+already derivable — any other domain referencing this order computes the same GUID.
 
 **Checkpoint:** `tdm explain` shows the grammar match, the entity resolution, the faker
 and the persistence route for your step. When a step ever surprises you, this is the

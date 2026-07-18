@@ -1047,6 +1047,18 @@ namespace Tdm.Host
                             Console.WriteLine($"  persist via : {info.PersistRoute}");
                             Console.WriteLine($"  read repo   : {info.ReadRepository ?? "-"}");
 
+                            // A Create step carries the natural key as an ordinary override
+                            // ("order number = ORD-1"); which override that is only becomes
+                            // knowable here, once resolution has named the key property.
+                            if (naturalKeyValue is null && step is Tdm.Core.Grammar.CreateStep createStep &&
+                                info.NaturalKey is { } naturalKeyProperty)
+                            {
+                                naturalKeyValue = createStep.Overrides.FirstOrDefault(o =>
+                                        Tdm.Core.Naming.NameMatcher.Normalize(o.Name) ==
+                                        Tdm.Core.Naming.NameMatcher.Normalize(naturalKeyProperty))
+                                    ?.RawValue;
+                            }
+
                             if (step is Tdm.Core.Grammar.ExternalReferenceStep)
                             {
                                 // Identity belongs to the owning domain — printed in the External section below.
