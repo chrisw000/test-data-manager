@@ -18,3 +18,5 @@ docs-site/site/
 # VS Code extension build output (editors/vscode)
 node_modules/
 *.vsix
+# Seed pack extraction (W4-D7)
+packs/

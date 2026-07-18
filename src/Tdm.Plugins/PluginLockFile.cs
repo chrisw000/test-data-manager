@@ -25,6 +25,11 @@ public sealed class PluginLockFile
     public Dictionary<string, Dictionary<string, LockedPackage>> Domains { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Seed packs (W4-D7): packageId → locked entry — packs ride the same
+    /// acquisition/lockfile flow as plugins, so runs pin their pack versions too.</summary>
+    public Dictionary<string, LockedPackage> Packs { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
     [JsonIgnore]
     public string Path { get; private set; } = FileName;
 

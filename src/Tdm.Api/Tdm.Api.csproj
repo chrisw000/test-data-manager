@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>TDM API-based seeding (W4-D6): an IDomainRuntime that persists through a domain's public HTTP API instead of a database — for domains that forbid direct writes. The engine is untouched; entity shape comes from the same plugin-loaded CLR types.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tdm.Core\Tdm.Core.csproj" />
+  </ItemGroup>
+
+</Project>

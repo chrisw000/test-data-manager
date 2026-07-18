@@ -1,18 +1,18 @@
 using System.Reflection;
 using Bogus;
 using Tdm.Core.Execution;
-using Tdm.Core.Generation;
 
-namespace Tdm.EfCore.Fakers;
+namespace Tdm.Core.Generation;
 
 /// <summary>
 /// Heuristic fallback generator used when no convention <c>{Name}Faker</c> exists (handoff §5.3):
 /// discovered <see cref="IValueGeneratorPlugin"/>s first (W4-D4 — teams extend this table with
 /// code, not forks), then property-name heuristics, then property-type rules. Navigation
 /// properties, foreign key columns and the primary key are skipped — relationships are explicit
-/// via references, and keys come from the identity contract.
+/// via references, and keys come from the identity contract. Shared by the EF and API domain
+/// runtimes (W4-D6).
 /// </summary>
-internal static class AutoFaker
+public static class AutoFaker
 {
     public static object Generate(EntityDescriptor descriptor, IReadOnlySet<string> skipProperties, Faker faker,
         IReadOnlyList<IValueGeneratorPlugin> plugins, string? locale, List<string>? usedPlugins = null)

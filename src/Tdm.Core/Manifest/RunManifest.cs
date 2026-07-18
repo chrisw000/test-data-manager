@@ -44,6 +44,9 @@ public sealed class RunInfo
     /// <summary>Resolved plugin package versions per domain ("{domain}:{packageId}" → version)
     /// when NuGet acquisition is used — a run is reproducible down to the plugin version (W1-D2).</summary>
     public Dictionary<string, string> PluginPackages { get; set; } = [];
+    /// <summary>Resolved seed pack versions (pack → version, W4-D7) — shared base data is
+    /// pinned in the manifest exactly like plugin packages.</summary>
+    public Dictionary<string, string> SeedPacks { get; set; } = [];
     public Dictionary<string, BenchmarkStats> Benchmark { get; set; } = [];
     /// <summary>Who/what ran this and against which config (W2-D1). Consumed alongside the
     /// checksum/signature written next to the manifest file — see docs/audit-and-signing.md.</summary>

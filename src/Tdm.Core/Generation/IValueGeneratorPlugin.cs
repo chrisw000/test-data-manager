@@ -34,7 +34,7 @@ public static class ValueGeneratorDiscovery
     public static IReadOnlyList<IValueGeneratorPlugin> DiscoverFrom(IEnumerable<Assembly> assemblies)
     {
         var plugins = new List<IValueGeneratorPlugin>();
-        foreach (var type in assemblies.SelectMany(SafeGetTypes))
+        foreach (var type in assemblies.SelectMany(AssemblyScan.SafeGetTypes))
         {
             if (type is not { IsClass: true, IsAbstract: false } ||
                 !typeof(IValueGeneratorPlugin).IsAssignableFrom(type) ||
@@ -42,11 +42,5 @@ public static class ValueGeneratorDiscovery
             plugins.Add((IValueGeneratorPlugin)Activator.CreateInstance(type)!);
         }
         return [.. plugins.OrderBy(p => p.Name, StringComparer.Ordinal)];
-    }
-
-    private static IEnumerable<Type> SafeGetTypes(Assembly assembly)
-    {
-        try { return assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException ex) { return ex.Types.Where(t => t is not null)!; }
     }
 }

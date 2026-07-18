@@ -7,7 +7,9 @@ public enum FailurePolicy { BestEffort, FailObject, FailRun }
 
 public enum LifecycleMode { Persistent, Transactional, TrackedTeardown }
 
-public enum PersistenceMode { RepositoryFirst, DbContextOnly, RepositoryOnly }
+/// <summary>Api (W4-D6): persistence routes through the domain's public HTTP API instead of
+/// a database — for domains that forbid direct writes. See <see cref="ApiSettings"/>.</summary>
+public enum PersistenceMode { RepositoryFirst, DbContextOnly, RepositoryOnly, Api }
 
 public enum ExternalReferenceMode { Synthesize, Verify, Trust }
 
@@ -31,6 +33,10 @@ public sealed class TdmSettings
     /// whole, so city↔postcode↔country style fields stay consistent per entity.</summary>
     public Dictionary<string, DatasetSettings> Datasets { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Shared seed packs (W4-D7): versioned packages of feature files + entity
+    /// config fragments + key-registry entries, executed before local features. Kills the
+    /// copy-paste economy — "EU reference customers v2" is a dependency, not a snippet.</summary>
+    public List<SeedPackSettings> SeedPacks { get; set; } = [];
     /// <summary>Directory of the loaded settings file — dataset paths resolve against it.
     /// Set by <see cref="Load"/>; never serialized.</summary>
     [JsonIgnore]
@@ -218,6 +224,8 @@ public sealed class DomainSettings
     /// "en_GB", "de", "fr". Default "en". Determinism is unchanged — the locale picks the
     /// vocabulary, the per-scenario Randomizer picks from it.</summary>
     public string? Locale { get; set; }
+    /// <summary>Endpoint map for <see cref="PersistenceMode.Api"/> (W4-D6).</summary>
+    public ApiSettings? Api { get; set; }
 
     public string ResolveConnectionString()
     {
@@ -360,4 +368,70 @@ public sealed class PropertyGenerationSettings
 public sealed class DatasetSettings
 {
     public string Path { get; set; } = "";
+}
+
+/// <summary>
+/// One seed pack reference (W4-D7): either a NuGet package (riding the plugin feeds +
+/// tdm.plugins.lock.json, so packs are reproducible like plugins) or a local folder for
+/// development / CI-restored layouts. Pack layout: <c>features/*.feature</c>,
+/// optional <c>tdm.entities.json</c> fragment, optional <c>tdm.keys.json</c> registry,
+/// optional <c>datasets/</c>.
+/// </summary>
+public sealed class SeedPackSettings
+{
+    /// <summary>NuGet package id, resolved from plugins.feeds.</summary>
+    public string? Package { get; set; }
+    /// <summary>Version or floating range; the resolved version is pinned in the lockfile.</summary>
+    public string? Version { get; set; }
+    /// <summary>Local pack folder (dev mode); wins over <see cref="Package"/> when set.</summary>
+    public string? Path { get; set; }
+}
+
+/// <summary>
+/// API persistence for one domain (W4-D6): seeding routes through the domain's public HTTP
+/// API — which also exercises its validation, auth and side-effects for free. Supported
+/// lifecycles: Persistent and TrackedTeardown (deletes via API, reverse order);
+/// Transactional is unsupported and fails validation.
+/// </summary>
+public sealed class ApiSettings
+{
+    public string BaseUrl { get; set; } = "";
+    public ApiAuthSettings? Auth { get; set; }
+    /// <summary>Logical entity name → endpoint templates. This map is also the domain's
+    /// entity list: only entities named here are seedable via the API.</summary>
+    public Dictionary<string, ApiEntityEndpoints> Entities { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+    public int TimeoutSeconds { get; set; } = 30;
+    /// <summary>Retries per request on 5xx/connection failure (bulk risk mitigation, §6).</summary>
+    public int MaxRetries { get; set; } = 2;
+    public int RetryDelayMs { get; set; } = 200;
+}
+
+/// <summary>
+/// Endpoint templates: "METHOD /path", with <c>{id}</c> (key value) and <c>{key}</c>
+/// (URL-escaped natural key) placeholders, e.g. "GET /api/customers?name={key}".
+/// </summary>
+public sealed class ApiEntityEndpoints
+{
+    public string? Create { get; set; }
+    public string? Update { get; set; }
+    public string? Delete { get; set; }
+    public string? GetByKey { get; set; }
+    /// <summary>Optional — enables manifest playback/verify by recorded id.</summary>
+    public string? GetById { get; set; }
+}
+
+/// <summary>
+/// API auth (W4-D6): the shipped mode resolves a token through the W2-D8 secret chain and
+/// sends it as "{scheme} {token}" in <see cref="HeaderName"/>. Cloud token flows (AzureAd
+/// client credentials etc.) belong host-side behind the same posture as ISecretProvider —
+/// resolve the token there and hand it to TDM via the chain; TDM ships no cloud SDKs.
+/// </summary>
+public sealed class ApiAuthSettings
+{
+    /// <summary>Secret-chain name of the token (inline → environment → cloud adapter).</summary>
+    public string? TokenSecret { get; set; }
+    public string HeaderName { get; set; } = "Authorization";
+    /// <summary>Prefix before the token; empty for raw header values (API keys).</summary>
+    public string Scheme { get; set; } = "Bearer";
 }

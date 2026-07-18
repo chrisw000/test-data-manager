@@ -3,15 +3,16 @@ using Bogus;
 using Tdm.Core.Naming;
 using Tdm.Core.Settings;
 
-namespace Tdm.EfCore.Fakers;
+namespace Tdm.Core.Generation;
 
 /// <summary>
 /// Convention faker discovery (handoff §5.3): a type named per the profile's
 /// <c>fakerPattern</c> deriving from <c>Faker&lt;TEntity&gt;</c> in the plugin assemblies.
 /// Instantiation prefers a parameterless constructor, else one taking <c>int seed</c>.
 /// <c>UseSeed</c> is applied after construction — fakers must not randomise in constructors.
+/// Shared by the EF and API domain runtimes (W4-D6): one discovery, identical generation.
 /// </summary>
-internal sealed class FakerBinding(Type fakerType)
+public sealed class FakerBinding(Type fakerType)
 {
     public Type FakerType { get; } = fakerType;
 
@@ -51,7 +52,7 @@ internal sealed class FakerBinding(Type fakerType)
         var fakerBase = typeof(Faker<>).MakeGenericType(entityType);
 
         var match = assemblies
-            .SelectMany(DbContextActivator.SafeGetTypes)
+            .SelectMany(AssemblyScan.SafeGetTypes)
             .FirstOrDefault(t => t is { IsClass: true, IsAbstract: false } &&
                                  string.Equals(t.Name, wantedName, StringComparison.OrdinalIgnoreCase) &&
                                  fakerBase.IsAssignableFrom(t));

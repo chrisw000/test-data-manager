@@ -384,6 +384,7 @@ namespace Tdm.Host
         private readonly string _policyFilePath;
         private readonly string? _approvalToken;
         private readonly string? _resumeJournalPath;
+        private IReadOnlyList<Tdm.Core.SeedPacks.SeedPackContent>? _seedPacks;
         private readonly Tdm.Core.Secrets.SecretChain _secrets;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger _log;
@@ -447,7 +448,9 @@ namespace Tdm.Host
                     return 2;
                 }
 
-                var plan = new GherkinPlanParser().ParsePaths(_settings.Run.FeaturePaths, _baseDirectory);
+                // Pack features run before local ones: pack list order, alphabetical within (W4-D7).
+                var plan = Tdm.Core.SeedPacks.SeedPackApplier.BuildPlan(
+                    new GherkinPlanParser(), _seedPacks ?? [], _settings.Run.FeaturePaths, _baseDirectory);
                 var totalScenarios = plan.Features.Sum(f => f.Scenarios.Count);
                 _log.LogInformation("{Mode} {Features} feature file(s), {Scenarios} scenario(s)",
                     dryRun ? "Validating" : "Running", plan.Features.Count, totalScenarios);
@@ -534,6 +537,8 @@ namespace Tdm.Host
                 foreach (var plugin in plugins)
                 foreach (var (packageId, version) in plugin.Packages)
                     manifest.Run.PluginPackages[$"{plugin.DomainName}:{packageId}"] = version;
+                foreach (var pack in _seedPacks ?? [])
+                    manifest.Run.SeedPacks[pack.Name] = pack.Version;
 
                 // Attribution captured into the manifest itself, not a side file — one audit
                 // artifact, so signing covers it all at once (W2-D1).
@@ -564,7 +569,10 @@ namespace Tdm.Host
         {
             var registries = plugins.Where(p => p.KeyRegistry is not null)
                 .ToDictionary(p => p.DomainName, p => p.KeyRegistry!, StringComparer.OrdinalIgnoreCase);
-            var violations = Tdm.Policy.KeyRegistryChecker.Check(plan, registries);
+            // Seed packs may carry key-registry entries too (W4-D7); a domain's own
+            // plugin-published registry stays authoritative.
+            var merged = Tdm.Core.SeedPacks.SeedPackApplier.CollectKeyRegistries(_seedPacks ?? [], registries);
+            var violations = Tdm.Policy.KeyRegistryChecker.Check(plan, merged);
             if (violations.Count > 0) return (violations, false); // never overridable
 
             if (_environmentName is null) return (violations, false);
@@ -1037,6 +1045,20 @@ namespace Tdm.Host
 
         private async Task<(List<IDomainRuntime> Runtimes, List<LoadedPlugin> Plugins)> BuildRuntimesAsync(CancellationToken ct)
         {
+            // Seed packs (W4-D7) resolve before runtimes build: pack entity-config fragments
+            // (naturalKey etc.) merge under local settings and must shape the bindings.
+            if (_seedPacks is null)
+            {
+                var resolver = new SeedPackResolver(_settings.Plugins, _baseDirectory, _log) { UpdatePlugins = _updatePlugins };
+                _seedPacks = await resolver.ResolveAsync(_settings.SeedPacks, ct);
+                if (_seedPacks.Count > 0)
+                {
+                    Tdm.Core.SeedPacks.SeedPackApplier.MergeConfig(_settings, _seedPacks);
+                    _log.LogInformation("Seed pack(s): {Packs}",
+                        string.Join(", ", _seedPacks.Select(p => $"{p.Name}@{p.Version}")));
+                }
+            }
+
             await ResolveDomainSecretsAsync(ct);
             IPluginAcquirer acquirer = _settings.Plugins.Acquisition == PluginAcquisitionMode.NuGet
                 ? new NuGetPluginAcquirer(_settings.Plugins, _baseDirectory, _log) { UpdatePlugins = _updatePlugins }
@@ -1048,11 +1070,22 @@ namespace Tdm.Host
             {
                 var plugin = await loader.LoadAsync(domain, ct);
                 plugins.Add(plugin);
+                var domainLog = _loggerFactory.CreateLogger($"Tdm.Domain.{domain.Name}");
+                if (domain.Persistence == PersistenceMode.Api)
+                {
+                    // W4-D6: same plugin-loaded CLR types, persistence via the domain's public
+                    // API — the engine sees just another IDomainRuntime. Auth token via the
+                    // W2-D8 secret chain.
+                    var token = domain.Api?.Auth?.TokenSecret is { Length: > 0 } secretName
+                        ? await _secrets.GetSecretAsync(secretName, ct)
+                        : null;
+                    runtimes.Add(Tdm.Api.ApiRuntimeBuilder.Build(domain, _settings, plugin.Assemblies, domainLog, token));
+                    continue;
+                }
                 // Provider plugin packages (W3-D5) travel as dependencies of the domain package;
                 // their bootstraps must be registered before the runtime activates any context.
                 ProviderRegistry.DiscoverFrom(plugin.Assemblies, _log);
-                runtimes.Add(DomainRuntimeBuilder.Build(domain, _settings, plugin.Assemblies,
-                    _loggerFactory.CreateLogger($"Tdm.Domain.{domain.Name}")));
+                runtimes.Add(DomainRuntimeBuilder.Build(domain, _settings, plugin.Assemblies, domainLog));
             }
             return (runtimes, plugins);
         }

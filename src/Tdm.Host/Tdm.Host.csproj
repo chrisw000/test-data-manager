@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Tdm.Policy\Tdm.Policy.csproj" />
     <ProjectReference Include="..\Tdm.Registry.Client\Tdm.Registry.Client.csproj" />
     <ProjectReference Include="..\Tdm.Lsp\Tdm.Lsp.csproj" />
+    <ProjectReference Include="..\Tdm.Api\Tdm.Api.csproj" />
   </ItemGroup>
 
 </Project>

@@ -13,7 +13,6 @@ using Tdm.Core.Generation;
 using Tdm.Core.Naming;
 using Tdm.Core.Settings;
 using Tdm.EfCore.Bulk;
-using Tdm.EfCore.Fakers;
 using Tdm.EfCore.Querying;
 using Tdm.EfCore.Repositories;
 
