@@ -14,7 +14,8 @@ roadmap builds on them rather than on new core machinery:
 
 Every point below is tagged with the wave(s) it feeds into — e.g. **[1]** for Wave 1.
 Full handoffs: [Wave 1](wave-1-handoff.md) · [Wave 2](wave-2-handoff.md) ·
-[Wave 3](wave-3-handoff.md) · [Wave 4](wave-4-handoff.md)
+[Wave 3](wave-3-handoff.md) · [Wave 4](wave-4-handoff.md) ·
+[Wave 5 (documentation & enablement)](wave-5-handoff.md)
 
 | Wave | Theme | Why this order |
 |---|---|---|
