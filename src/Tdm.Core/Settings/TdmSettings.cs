@@ -27,6 +27,14 @@ public sealed class TdmSettings
         new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, EntitySettings> Entities { get; set; } =
         new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Named correlated-tuple datasets (W4-D4): CSV files whose rows are sampled
+    /// whole, so city↔postcode↔country style fields stay consistent per entity.</summary>
+    public Dictionary<string, DatasetSettings> Datasets { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Directory of the loaded settings file — dataset paths resolve against it.
+    /// Set by <see cref="Load"/>; never serialized.</summary>
+    [JsonIgnore]
+    public string? BaseDirectory { get; set; }
 
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -43,6 +51,7 @@ public sealed class TdmSettings
         using var stream = File.OpenRead(path);
         var settings = JsonSerializer.Deserialize<TdmSettings>(stream, JsonOptions)
                        ?? throw new InvalidOperationException($"Settings file '{path}' deserialised to null.");
+        settings.BaseDirectory = Path.GetDirectoryName(Path.GetFullPath(path));
         settings.ApplyDefaults();
         return settings;
     }
@@ -205,6 +214,10 @@ public sealed class DomainSettings
     /// <summary>Caps <see cref="RunSettings.MaxParallelScenarios"/> when this domain participates
     /// in a run — a fragile database serialises the whole run without touching run settings.</summary>
     public int? MaxParallelScenarios { get; set; }
+    /// <summary>Bogus locale for this domain's generated names/addresses (W4-D5), e.g.
+    /// "en_GB", "de", "fr". Default "en". Determinism is unchanged — the locale picks the
+    /// vocabulary, the per-scenario Randomizer picks from it.</summary>
+    public string? Locale { get; set; }
 
     public string ResolveConnectionString()
     {
@@ -310,4 +323,41 @@ public sealed class EntitySettings
     public ExternalBehavior ExternalBehavior { get; set; } = ExternalBehavior.FkOnly;
     /// <summary>Logical name of the local read-model entity seeded when <see cref="ExternalBehavior.Projection"/> applies.</summary>
     public string? ProjectionEntity { get; set; }
+    /// <summary>Config-declared statistical generation per property (W4-D4): distributions,
+    /// categorical weights and dataset columns, applied over the faker's output and drawing
+    /// from the per-scenario Randomizer (W4-D5). Overrides still win.</summary>
+    public Dictionary<string, PropertyGenerationSettings> Properties { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// One property's statistical generation config (W4-D4). Exactly one of
+/// <see cref="Distribution"/>, <see cref="Weights"/> or <see cref="Dataset"/> applies.
+/// </summary>
+public sealed class PropertyGenerationSettings
+{
+    /// <summary>normal | lognormal | uniform | exponential.</summary>
+    public string? Distribution { get; set; }
+    /// <summary>normal: the mean. lognormal: the median (scale) — exp(μ). exponential: the mean (1/rate).</summary>
+    public double? Mean { get; set; }
+    /// <summary>normal: standard deviation. lognormal: σ of the underlying normal.</summary>
+    public double? Sigma { get; set; }
+    /// <summary>uniform bounds; for other distributions an optional clamp.</summary>
+    public double? Min { get; set; }
+    public double? Max { get; set; }
+    /// <summary>Rounding for floating targets (default 2). Integer targets always round to whole.</summary>
+    public int? Decimals { get; set; }
+    /// <summary>Weighted categorical values: value → relative weight (normalised at sample time).</summary>
+    public Dictionary<string, double>? Weights { get; set; }
+    /// <summary>Name of a <see cref="TdmSettings.Datasets"/> entry. All properties of one
+    /// entity naming the same dataset are filled from a single sampled row (W4-D5).</summary>
+    public string? Dataset { get; set; }
+    /// <summary>Column within <see cref="Dataset"/>; defaults to the property name.</summary>
+    public string? Column { get; set; }
+}
+
+/// <summary>A named CSV dataset (first row = header), path relative to the settings file.</summary>
+public sealed class DatasetSettings
+{
+    public string Path { get; set; } = "";
 }

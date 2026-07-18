@@ -1,7 +1,7 @@
 {
   "modelVersion": 1,
   "tdmVersion": "0.1.0",
-  "settingsFileSha256": "5971c635485e69d733826c33fbe8e06fc95be7975b5a08d6ba27f6ec0ea1bf54",
+  "settingsFileSha256": "6bc6d8cd96e63ad654c9d925bbd03ea0fefcfa147ac5d5a5062af85d939206e7",
   "domains": [
     {
       "name": "Billing",

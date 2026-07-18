@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.Reflection;
 using Tdm.Core.Conversion;
 using Tdm.Core.Execution;
+using Tdm.Core.Generation;
 using Tdm.Core.Naming;
 using Tdm.Core.Settings;
 using Tdm.EfCore.Bulk;
@@ -38,8 +39,8 @@ internal sealed class EntityBinding
 /// faker bindings, warnings and policy findings — everything expensive, shared by all
 /// sessions. Schema creation happens exactly once across sessions.
 /// </summary>
-internal sealed class DomainRuntimeCore(DomainSettings settings, IReadOnlyList<Assembly> assemblies,
-    IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings,
+internal sealed class DomainRuntimeCore(DomainSettings settings, TdmSettings root,
+    IReadOnlyList<Assembly> assemblies, IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings,
     List<string> warnings, List<string> policyViolations, ILogger log)
 {
     public DomainSettings Settings { get; } = settings;
@@ -50,6 +51,12 @@ internal sealed class DomainRuntimeCore(DomainSettings settings, IReadOnlyList<A
     public List<string> PolicyViolations { get; } = policyViolations;
     public ILogger Log { get; } = log;
     public IReadOnlyList<EntityDescriptor> Entities { get; } = bindings.Select(b => b.Descriptor).ToList();
+    /// <summary>Statistical layer (W4-D4): shared across sessions — config and parsed
+    /// datasets are immutable; the per-scenario Randomizer supplies every draw.</summary>
+    public StatisticalGenerator Stats { get; } = new(root);
+    /// <summary>Generator plugins discovered from this domain's plugin assemblies (W4-D4).</summary>
+    public IReadOnlyList<IValueGeneratorPlugin> GeneratorPlugins { get; } =
+        ValueGeneratorDiscovery.DiscoverFrom(assemblies);
 
     private readonly Lock _schemaLock = new();
     private bool _schemaEnsured;
@@ -105,10 +112,10 @@ public sealed class DomainRuntime : IDomainRuntime
     private Faker _autoFaker = new();
     private LifecycleMode _lifecycle = LifecycleMode.Persistent;
 
-    internal DomainRuntime(DomainSettings settings, IReadOnlyList<Assembly> assemblies,
+    internal DomainRuntime(DomainSettings settings, TdmSettings root, IReadOnlyList<Assembly> assemblies,
         IReadOnlyList<Type> contextTypes, List<EntityBinding> bindings, List<string> warnings,
         List<string> policyViolations, ILogger? logger)
-        : this(new DomainRuntimeCore(settings, assemblies, contextTypes, bindings, warnings,
+        : this(new DomainRuntimeCore(settings, root, assemblies, contextTypes, bindings, warnings,
             policyViolations, logger ?? NullLogger.Instance))
     {
     }
@@ -187,7 +194,7 @@ public sealed class DomainRuntime : IDomainRuntime
                 _transactions.Add(await ctx.Database.BeginTransactionAsync(ct).ConfigureAwait(false));
         }
 
-        _autoFaker = new Faker { Random = new Randomizer(seed) };
+        _autoFaker = CreateLocaleFaker(Settings.Locale, seed);
         BuildRepositoryProvider();
         void BuildRepositoryProvider()
         {
@@ -305,24 +312,55 @@ public sealed class DomainRuntime : IDomainRuntime
 
     // ---------------------------------------------------------------- Generation
 
+    /// <summary>Locale picks the Bogus vocabulary (W4-D5); the explicit Randomizer keeps the
+    /// per-scenario determinism guarantee regardless.</summary>
+    private static Faker CreateLocaleFaker(string? locale, int seed)
+    {
+        try
+        {
+            return new Faker(locale ?? "en") { Random = new Randomizer(seed) };
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            throw new InvalidOperationException(
+                $"'{locale}' is not a valid Bogus locale. Examples: en, en_GB, de, fr, es, it, nl, pl, sv, ja, pt_BR, zh_CN.", ex);
+        }
+    }
+
     public object Generate(EntityDescriptor entity, out string fakerSource, List<string> warnings)
     {
         var binding = BindingFor(entity);
+        object instance;
+        string baseSource;
+        var usedPlugins = new List<string>();
         if (binding.Faker is { } faker)
         {
             // One instance per scenario: subsequent Generate calls consume the seeded
             // sequence in step order (handoff §7).
-            if (!_fakerInstances.TryGetValue(faker.FakerType, out var instance))
+            if (!_fakerInstances.TryGetValue(faker.FakerType, out var fakerInstance))
             {
-                instance = faker.CreateSeeded(_seedValue);
-                _fakerInstances[faker.FakerType] = instance;
+                fakerInstance = faker.CreateSeeded(_seedValue);
+                _fakerInstances[faker.FakerType] = fakerInstance;
             }
-            fakerSource = faker.FakerType.Name;
-            return faker.Generate(instance);
+            baseSource = faker.FakerType.Name;
+            instance = faker.Generate(fakerInstance);
+        }
+        else
+        {
+            baseSource = "auto";
+            instance = AutoFaker.Generate(entity, binding.AutoFakerSkip, _autoFaker,
+                _core.GeneratorPlugins, Settings.Locale, usedPlugins);
         }
 
-        fakerSource = "auto";
-        return AutoFaker.Generate(entity, binding.AutoFakerSkip, _autoFaker);
+        // Statistical layer (W4-D4): declarative distributions/weights/datasets apply over
+        // any faker's output; the engine's overrides still win. The fakerSource markers keep
+        // the manifest attestation truthful about what shaped the data.
+        var stat = _core.Stats.Apply(entity, instance, _autoFaker.Random);
+        fakerSource = baseSource
+            + (usedPlugins.Count > 0 ? $"+plugin:{string.Join(",", usedPlugins)}" : "")
+            + (stat.Distributions ? "+distributions" : "")
+            + (stat.Datasets ? "+datasets" : "");
+        return instance;
     }
 
     private int _seedValue;

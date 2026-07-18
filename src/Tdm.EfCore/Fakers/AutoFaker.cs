@@ -1,18 +1,21 @@
 using System.Reflection;
 using Bogus;
 using Tdm.Core.Execution;
+using Tdm.Core.Generation;
 
 namespace Tdm.EfCore.Fakers;
 
 /// <summary>
 /// Heuristic fallback generator used when no convention <c>{Name}Faker</c> exists (handoff §5.3):
-/// property-name heuristics first, then property-type rules. Navigation properties, foreign key
-/// columns and the primary key are skipped — relationships are explicit via references, and keys
-/// come from the identity contract.
+/// discovered <see cref="IValueGeneratorPlugin"/>s first (W4-D4 — teams extend this table with
+/// code, not forks), then property-name heuristics, then property-type rules. Navigation
+/// properties, foreign key columns and the primary key are skipped — relationships are explicit
+/// via references, and keys come from the identity contract.
 /// </summary>
 internal static class AutoFaker
 {
-    public static object Generate(EntityDescriptor descriptor, IReadOnlySet<string> skipProperties, Faker faker)
+    public static object Generate(EntityDescriptor descriptor, IReadOnlySet<string> skipProperties, Faker faker,
+        IReadOnlyList<IValueGeneratorPlugin> plugins, string? locale, List<string>? usedPlugins = null)
     {
         var instance = Activator.CreateInstance(descriptor.ClrType)
             ?? throw new InvalidOperationException($"{descriptor.ClrType.Name} has no public parameterless constructor.");
@@ -20,10 +23,28 @@ internal static class AutoFaker
         foreach (var prop in descriptor.ClrType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!prop.CanWrite || skipProperties.Contains(prop.Name)) continue;
-            var value = ValueFor(prop, faker);
+            var value = PluginValueFor(descriptor, prop, faker, plugins, locale, usedPlugins) ?? ValueFor(prop, faker);
             if (value is not null) prop.SetValue(instance, value);
         }
         return instance;
+    }
+
+    private static object? PluginValueFor(EntityDescriptor descriptor, PropertyInfo prop, Faker faker,
+        IReadOnlyList<IValueGeneratorPlugin> plugins, string? locale, List<string>? usedPlugins)
+    {
+        if (plugins.Count == 0) return null;
+        var context = new ValueGenerationContext(descriptor.DomainName, descriptor.LogicalName, prop, locale);
+        foreach (var plugin in plugins)
+        {
+            if (!plugin.Matches(context)) continue;
+            // Null means "no value after all" — fall through to the next plugin / heuristics.
+            if (plugin.Generate(context, faker.Random) is { } value)
+            {
+                if (usedPlugins?.Contains(plugin.Name) == false) usedPlugins.Add(plugin.Name);
+                return value;
+            }
+        }
+        return null;
     }
 
     private static object? ValueFor(PropertyInfo prop, Faker f)

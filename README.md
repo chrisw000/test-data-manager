@@ -36,7 +36,7 @@ CLI overrides: `--seed n`, `--policy BestEffort|FailObject|FailRun`,
 | Project | Purpose |
 |---|---|
 | `src/Tdm.Identity` | **Frozen identity contract v1** — zero-dependency UUIDv5 derivation (`netstandard2.0` + `net10.0`) so API mocks and other tooling compute identical GUIDs |
-| `src/Tdm.Core` | Grammar, seeding pipeline, override engine, failure policies, manifest model, benchmark aggregation. No EF references |
+| `src/Tdm.Core` | Grammar, seeding pipeline, override engine, failure policies, manifest model, benchmark aggregation, statistical generation (distributions/weights/correlated datasets + `IValueGeneratorPlugin`). No EF references |
 | `src/Tdm.EfCore` | EF-model-first entity resolution, repository/faker resolution, persistence routing, lifecycle management, provider registry (Sqlite/SqlServer in-box; `IProviderBootstrap` plugin seam) |
 | `src/Tdm.Providers.PostgreSql` | PostgreSQL provider plugin: Npgsql bootstrap + binary `COPY` bulk inserter, discovered from a domain's plugin assemblies |
 | `src/Tdm.Plugins` | Isolated `AssemblyLoadContext` per domain, folder-based acquisition (NuGet-feed acquisition is a documented extension point: `IPluginAcquirer`) |

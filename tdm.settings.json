@@ -20,7 +20,9 @@
       "connectionString": "Data Source=./output/orders-demo.db",
       "conventionProfile": "modern",
       "persistence": "RepositoryFirst",
-      "ensureCreated": true
+      "ensureCreated": true,
+      // W4-D5: Bogus vocabulary for generated names/addresses; determinism unchanged.
+      "locale": "en_GB"
     },
     {
       "name": "Billing",
@@ -37,7 +39,15 @@
   "entities": {
     // Product has no write repository by design — explicit policy exemption (docs/adr-0001).
     "Product": { "naturalKey": "Sku", "requireRepository": false },
-    "Order": { "naturalKey": "OrderNumber" },
+    "Order": {
+      "naturalKey": "OrderNumber",
+      // W4-D4: declarative statistical generation — applied over the faker's output,
+      // drawn from the per-scenario seed; step overrides still win.
+      "properties": {
+        "Status": { "weights": { "Pending": 0.6, "Shipped": 0.3, "Cancelled": 0.1 } },
+        "Total": { "distribution": "lognormal", "mean": 120, "sigma": 1.2 }
+      }
+    },
     "Invoice": { "naturalKey": "InvoiceNumber" },
     "Customer": { "externalBehavior": "Projection", "projectionEntity": "CustomerSummary" },
     "CustomerSummary": { "naturalKey": "Name" }
