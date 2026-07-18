@@ -154,6 +154,49 @@ lspCommand.SetAction(async (parseResult, ct) =>
     return 0;
 });
 
+var profileSampleOption = new Option<int>("--sample")
+{
+    Description = "Rows sampled per entity (upper bound)",
+    DefaultValueFactory = _ => 10_000,
+};
+var categoricalMaxOption = new Option<int>("--categorical-max")
+{
+    Description = "Columns with at most this many distinct values are treated as categorical (weights captured)",
+    DefaultValueFactory = _ => 10,
+};
+var noValuesOption = new Option<bool>("--no-values")
+{
+    Description = "Suppress category labels entirely — cardinalities and numeric shapes only",
+};
+var profileOutOption = new Option<string>("--out")
+{
+    Description = "Statistics pack output path",
+    DefaultValueFactory = _ => "tdm.stats.json",
+};
+var fragmentOption = new Option<string?>("--fragment")
+{
+    Description = "Also emit an entities-config fragment (the seed-pack fragment shape) with the suggested distributions/weights",
+};
+var profileCommand = new Command("profile",
+    "W4-D8 spike (prototype, not GA): connect read-only to a production-like source and emit a statistics pack — " +
+    "per-column distributions, cardinalities, correlation hints, never row values. Feed the fragment into " +
+    "entities.{X}.properties (see docs/subsetting-spike.md; data-protection review required before use on real production data).")
+{
+    settingsOption, domainOption, profileSampleOption, categoricalMaxOption, noValuesOption, profileOutOption, fragmentOption,
+};
+profileCommand.SetAction(async (parseResult, ct) =>
+{
+    var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!, null, null, null, null);
+    return await composer.ProfileAsync(
+        parseResult.GetValue(domainOption),
+        new Tdm.EfCore.Profiling.ProfileOptions(
+            parseResult.GetValue(profileSampleOption),
+            parseResult.GetValue(categoricalMaxOption),
+            IncludeValues: !parseResult.GetValue(noValuesOption)),
+        parseResult.GetValue(profileOutOption)!,
+        parseResult.GetValue(fragmentOption), ct);
+});
+
 var stepArgument = new Argument<string>("step") { Description = "The step text, e.g. \"an Order exists for Customer \\\"Acme Ltd\\\"\"" };
 var keywordOption = new Option<string>("--keyword") { Description = "Gherkin keyword context", DefaultValueFactory = _ => "Given" };
 var explainCommand = new Command("explain", "Explain every pipeline decision for a single step: grammar rule, entity resolution, faker, persistence route, identity. No database connection.")
@@ -359,6 +402,7 @@ root.Subcommands.Add(publishCommand);
 root.Subcommands.Add(reportCommand);
 root.Subcommands.Add(exportModelCommand);
 root.Subcommands.Add(lspCommand);
+root.Subcommands.Add(profileCommand);
 
 try
 {
@@ -544,6 +588,15 @@ namespace Tdm.Host
                 // artifact, so signing covers it all at once (W2-D1).
                 manifest.Run.Attribution = Tdm.Observability.Audit.AttributionCollector.Collect(_settingsFilePath);
                 manifest.Run.Attribution.ResumedFrom = resumeState?.JournalPath;
+                // Declared stats packs (W4-D8): production-derived shapes are audit-visible.
+                manifest.Run.Attribution.StatsPacks = [.. _settings.StatsPacks.Select(path =>
+                {
+                    var full = Path.GetFullPath(path, _baseDirectory);
+                    var hash = File.Exists(full)
+                        ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(full)))[..12]
+                        : "missing";
+                    return $"{Path.GetFileName(full)}:{hash}";
+                })];
 
                 var manifestFile = await WriteManifestArtifactsAsync(manifest, reports, ct);
                 if (registry is not null)
@@ -797,6 +850,60 @@ namespace Tdm.Host
                 File.WriteAllText(fullPath, model.Serialize());
                 _log.LogInformation("Model exported: {Path} ({Domains} domain(s), {Entities} entities)",
                     fullPath, model.Domains.Count, model.Domains.Sum(d => d.Entities.Count));
+                return 0;
+            }
+            finally
+            {
+                await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
+        /// <summary>`tdm profile` (W4-D8 spike): read-only statistics over each database
+        /// domain's entities. Api domains have no query surface and are skipped.</summary>
+        public async Task<int> ProfileAsync(string? domainFilter, Tdm.EfCore.Profiling.ProfileOptions options,
+            string outPath, string? fragmentPath, CancellationToken ct)
+        {
+            var (runtimes, plugins) = await BuildRuntimesAsync(ct);
+            try
+            {
+                var combined = new Tdm.Core.Profiling.StatsPack
+                {
+                    GeneratedUtc = DateTime.UtcNow,
+                    SampleRows = options.SampleRows,
+                    ValuesSuppressed = !options.IncludeValues,
+                };
+                foreach (var domain in _settings.Domains)
+                {
+                    if (domainFilter is not null &&
+                        !string.Equals(domain.Name, domainFilter, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (domain.Persistence == PersistenceMode.Api)
+                    {
+                        _log.LogInformation("Skipping domain {Domain}: persistence Api has no query surface to profile.", domain.Name);
+                        continue;
+                    }
+                    var plugin = plugins.First(p => string.Equals(p.DomainName, domain.Name, StringComparison.OrdinalIgnoreCase));
+                    var pack = Tdm.EfCore.Profiling.StatsProfiler.Profile(domain, _settings, plugin.Assemblies, options, _log);
+                    foreach (var (entityName, stats) in pack.Entities)
+                    {
+                        if (!combined.Entities.TryAdd(entityName, stats))
+                            _log.LogWarning("Entity name '{Entity}' profiled in multiple domains — keeping the first.", entityName);
+                    }
+                }
+
+                var fullOut = Path.GetFullPath(outPath, _baseDirectory);
+                File.WriteAllText(fullOut, combined.Serialize());
+                _log.LogInformation("Statistics pack written: {Path} ({Entities} entities). Never contains row values; " +
+                                    "category labels only below the categorical threshold.", fullOut, combined.Entities.Count);
+
+                if (fragmentPath is not null)
+                {
+                    var fragment = combined.ToFragment();
+                    var fullFragment = Path.GetFullPath(fragmentPath, _baseDirectory);
+                    File.WriteAllText(fullFragment,
+                        System.Text.Json.JsonSerializer.Serialize(fragment, TdmSettings.JsonOptions));
+                    _log.LogInformation("Entities-config fragment written: {Path} — merge into tdm.settings.json " +
+                                        "entities (and declare the stats pack under statsPacks for attribution).", fullFragment);
+                }
                 return 0;
             }
             finally

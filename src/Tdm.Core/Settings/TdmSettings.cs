@@ -37,6 +37,10 @@ public sealed class TdmSettings
     /// config fragments + key-registry entries, executed before local features. Kills the
     /// copy-paste economy — "EU reference customers v2" is a dependency, not a snippet.</summary>
     public List<SeedPackSettings> SeedPacks { get; set; } = [];
+    /// <summary>Paths of `tdm profile` statistics packs whose derived config this workspace
+    /// uses (W4-D8). Declared here so every run's attribution records them (name + content
+    /// hash) — the W2-D1 attestation posture stays truthful about production-derived shapes.</summary>
+    public List<string> StatsPacks { get; set; } = [];
     /// <summary>Directory of the loaded settings file — dataset paths resolve against it.
     /// Set by <see cref="Load"/>; never serialized.</summary>
     [JsonIgnore]

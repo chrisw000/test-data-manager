@@ -91,6 +91,9 @@ public sealed class AttributionInfo
     public string? SettingsFileSha256 { get; set; }
     /// <summary>Path of the journal this run resumed from (W3-D6), when --resume was used.</summary>
     public string? ResumedFrom { get; set; }
+    /// <summary>Statistics packs (W4-D8) declared by the settings, as "{file}:{sha256-12}" —
+    /// production-derived distribution shapes are visible in the audit trail.</summary>
+    public List<string> StatsPacks { get; set; } = [];
 }
 
 /// <summary>Classification of the generator sources that produced this run's data (W2-D1).

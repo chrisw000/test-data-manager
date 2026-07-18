@@ -42,7 +42,7 @@ CLI overrides: `--seed n`, `--policy BestEffort|FailObject|FailRun`,
 | `src/Tdm.Providers.PostgreSql` | PostgreSQL provider plugin: Npgsql bootstrap + binary `COPY` bulk inserter, discovered from a domain's plugin assemblies |
 | `src/Tdm.Plugins` | Isolated `AssemblyLoadContext` per domain, folder-based acquisition (NuGet-feed acquisition is a documented extension point: `IPluginAcquirer`) |
 | `src/Tdm.Observability` | OTLP exporters for the `Tdm` ActivitySource/Meter, manifest writer, run summary, report emitters (SARIF/JUnit/living-doc HTML) |
-| `src/Tdm.Host` | The `tdm` console CLI: `run` (`--resume`) \| `teardown` \| `validate` \| `list-entities` \| `explain` \| `replay` \| `verify` \| `publish` \| `report` \| `export-model` \| `lsp` \| `bench tune`/`compare` |
+| `src/Tdm.Host` | The `tdm` console CLI: `run` (`--resume`) \| `teardown` \| `validate` \| `list-entities` \| `explain` \| `replay` \| `verify` \| `publish` \| `report` \| `export-model` \| `lsp` \| `profile` \| `bench tune`/`compare` |
 | `src/Tdm.Lsp` | Language server (stdio): live `StepGrammar` diagnostics, entity/property completion and verb hover against the exported `tdm.model.json` — hand-rolled LSP framing, no server framework |
 | `editors/vscode` | Thin VS Code client (~100 lines) that launches `tdm lsp` for workspaces with a `tdm.settings.json`, claiming only configured `featurePaths` |
 | `grafana/` | Importable dashboard + starter alert rules for the `Tdm` OTEL metrics |

@@ -86,6 +86,8 @@ public static class HtmlReport
             Fact(html, "Settings SHA-256", settingsSha[..Math.Min(12, settingsSha.Length)] + "…");
         if (run.Attribution.ResumedFrom is { Length: > 0 } resumed)
             Fact(html, "Resumed from", resumed);
+        if (run.Attribution.StatsPacks.Count > 0)
+            Fact(html, "Stats packs", string.Join(" · ", run.Attribution.StatsPacks));
         if (run.RegistryRunId is { Length: > 0 } registryRun)
             Fact(html, "Registry run", registryRun);
         Fact(html, "Attestation", run.Attestation.SyntheticOnly
