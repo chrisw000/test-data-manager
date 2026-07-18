@@ -38,6 +38,8 @@ nav:
       - Seed packs: guides/seed-packs.md
       - TestContainers & the provider matrix: guides/testcontainers.md
       - Testing complex domains: guides/complex-domains.md
+  - Slides:
+      - Engineering Forum deck: slides/index.md
   - Reference:
       - Grammar: reference/grammar.md
       - Configuration: reference/configuration.md

@@ -9,6 +9,12 @@ machine-readable seeding manifest, and benchmark timings.
 
 Built to the design in [`tdm-handoff.md`](tdm-handoff.md) (all phases P1–P4).
 
+**Docs:** [chrisw000.github.io/test-data-manager](https://chrisw000.github.io/test-data-manager/) —
+start with the [≤15-minute Getting Started](https://chrisw000.github.io/test-data-manager/start/getting-started/).
+New to TDM? The [Engineering Forum deck](https://chrisw000.github.io/test-data-manager/slides/engineering-forum.html)
+lands the concept in twenty minutes (self-contained HTML — also opens from
+`docs-site/docs/slides/engineering-forum.html` with no network).
+
 ## Quick start
 
 ```powershell

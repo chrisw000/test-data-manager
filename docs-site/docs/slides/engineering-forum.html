@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TDM — Engineering Forum</title>
+<!-- W5-D3: one self-contained file. No network requests: no CDNs, no fonts, no images.
+     Opens from file:// on a podium laptop; prints one slide per page (toggle notes with S
+     first to include them). Palette mirrors the W4-P1 HTML report. -->
+<style>
+  :root { --bg: #ffffff; --fg: #1c2430; --muted: #5b6774; --line: #d9dee5; --panel: #f4f6f8;
+          --ok: #1a7f37; --warn: #9a6700; --fail: #cf222e; --accent: #0969da; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #30363d; --panel: #161b22;
+            --ok: #3fb950; --warn: #d29922; --fail: #f85149; --accent: #4493f8; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.5 -apple-system, "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif;
+  }
+  code, pre, .mono {
+    font-family: ui-monospace, "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+    font-size: 0.92em;
+  }
+  main { height: calc(100% - 2.4rem); }
+  .slide {
+    display: none; height: 100%; padding: 4vh 6vw; flex-direction: column;
+    max-width: 1200px; margin: 0 auto;
+  }
+  .slide.current { display: flex; }
+  .slide h1 { font-size: 2.6rem; margin: 0 0 0.4rem; }
+  .slide h2 { font-size: 1.9rem; margin: 0 0 1.2rem; }
+  .slide h2 .k { color: var(--accent); }
+  .slide ul { margin: 0.2rem 0; }
+  .slide li { margin: 0.35rem 0; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .fail { color: var(--fail); }
+  .accent { color: var(--accent); }
+  pre.block {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.8rem 1rem; overflow-x: auto; margin: 0.6rem 0;
+  }
+  .cols { display: flex; gap: 2rem; align-items: flex-start; }
+  .cols > * { flex: 1 1 0; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 0.9rem 1.1rem; }
+  .grow { flex: 1; }
+  .tag {
+    display: inline-block; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); border: 1px solid var(--line); border-radius: 1em; padding: 0.1em 0.8em;
+    margin-bottom: 0.8rem;
+  }
+  table.simple { border-collapse: collapse; width: 100%; }
+  table.simple th, table.simple td { border: 1px solid var(--line); padding: 0.35rem 0.6rem; text-align: left; }
+  table.simple th { background: var(--panel); }
+  svg text { fill: var(--fg); font-family: inherit; }
+  svg .m text, svg text.m { fill: var(--muted); }
+  svg .boxline { fill: var(--panel); stroke: var(--line); }
+  svg .edge { stroke: var(--accent); fill: none; }
+
+  /* Speaker notes: hidden until S; shown as a docked panel. Printed only when toggled on. */
+  .notes { display: none; }
+  body.show-notes .slide.current .notes {
+    display: block; margin-top: auto; border-top: 2px solid var(--accent);
+    background: var(--panel); padding: 0.7rem 1rem; font-size: 0.85rem; border-radius: 0 0 8px 8px;
+  }
+  .notes b:first-child { color: var(--accent); }
+
+  #hud {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 2.4rem;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 1rem; color: var(--muted); font-size: 0.8rem;
+    border-top: 1px solid var(--line); background: var(--bg);
+  }
+
+  @media print {
+    @page { size: landscape; margin: 10mm; }
+    main { height: auto; }
+    .slide { display: flex !important; height: auto; min-height: 180mm; page-break-after: always; padding: 8mm 10mm; }
+    body.show-notes .slide .notes {
+      display: block; margin-top: auto; border-top: 2px solid var(--accent);
+      background: var(--panel); padding: 0.7rem 1rem; font-size: 0.85rem;
+    }
+    #hud { display: none; }
+  }
+</style>
+</head>
+<body>
+<main id="deck">
+
+<!-- 1 ─ Title -->
+<section class="slide">
+  <div class="grow" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="mono muted" style="font-size:1rem;letter-spacing:0.3em">ENGINEERING FORUM</div>
+    <h1 style="font-size:4rem;margin:1rem 0">TDM</h1>
+    <h2 style="font-weight:400">Test data as <span class="k">executable language</span></h2>
+    <p class="muted" style="font-size:1.2rem">Test data in the test's language — deterministic, multi-domain, auditable.</p>
+  </div>
+  <aside class="notes">
+    <b>Takeaway:</b> TDM turns the business statement of what a test needs into the seeding
+    instruction itself. <b>Fallback:</b> none needed — title slide.
+    <b>Docs:</b> chrisw000.github.io/test-data-manager/
+  </aside>
+</section>
+
+<!-- 2 ─ The problem -->
+<section class="slide">
+  <span class="tag">The problem</span>
+  <h2>Everyone hand-rolls test data — and it rots</h2>
+  <div class="cols">
+    <div class="panel">
+      <div class="mono fail">seed_test_data_v14_FINAL.sql</div>
+      <p class="muted">4,000 lines of INSERTs. Nobody knows which tests still need which rows.
+      Schema moved on; the script didn't.</p>
+    </div>
+    <div class="panel">
+      <div class="mono warn">restore-golden-db.ps1</div>
+      <p class="muted">A shared "golden" snapshot that drifts weekly. Two teams fight over its
+      state; a restore breaks everyone's in-flight work.</p>
+    </div>
+    <div class="panel">
+      <div class="mono fail">prod-copy-sanitised(2).bak</div>
+      <p class="muted">A copy of production "just this once". GDPR risk, stale in a month,
+      and the sanitisation is nobody's job.</p>
+    </div>
+  </div>
+  <p style="font-size:1.15rem">The data a test needs is a <b>business statement</b> —
+  but today it is expressed as <b>infrastructure</b>.</p>
+  <aside class="notes">
+    <b>Takeaway:</b> test data is a business statement expressed as infrastructure — that's the
+    root defect. <b>Fallback:</b> ask the room who has a seed script nobody dares delete.
+    <b>Docs:</b> home page, "the problem sentence".
+  </aside>
+</section>
+
+<!-- 3 ─ What TDM is -->
+<section class="slide">
+  <span class="tag">What TDM is</span>
+  <h2>The business statement <span class="k">is</span> the seeding instruction</h2>
+  <pre class="block" style="font-size:1.15rem"><code>@seed:42
+Feature: Orders regression seed
+  Scenario: Customer places an order
+    Given a Customer exists with name "Acme Ltd" and tier "Gold"
+    And an Order exists for Customer "Acme Ltd" with status "Pending"
+    Then 1 Order should exist with status "Pending"</code></pre>
+  <ul>
+    <li>Plain Gherkin, matched by TDM's grammar — <b>no SQL, no builders, no fixtures</b></li>
+    <li>Domain teams ship the EF Core <code>DbContext</code> + repositories they already have, as plugins</li>
+    <li>Rows land in <b>your domain's own model</b>, deterministic and audited</li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> this six-line feature is a real, executed artifact from the repo — not
+    pseudocode. <b>Fallback:</b> the same feature is on the docs home page; open it there.
+    <b>Docs:</b> Start here → Getting started (runs this in ≤15 min).
+  </aside>
+</section>
+
+<!-- 4 ─ QA test seeding -->
+<section class="slide">
+  <span class="tag">QA test seeding</span>
+  <h2>The test's data, in the test's language</h2>
+  <div class="cols">
+    <div>
+      <pre class="block"><code>Given a Customer exists
+    with name "Acme Ltd" and tier "Gold"
+And an Order exists for Customer "Acme Ltd"
+    with order number "ORD-1001"
+    and status "Pending"
+Then an Order "ORD-1001" should exist
+    with status "Pending"</code></pre>
+      <ul class="muted" style="font-size:0.9rem">
+        <li>create · update · delete · bulk · <b>verify</b> verbs</li>
+        <li>lifecycles: persistent · tracked teardown · transactional</li>
+      </ul>
+    </div>
+    <div>
+      <table class="simple mono" style="font-size:0.8rem">
+        <tr><th colspan="3">Customers</th></tr>
+        <tr><td>e47cf5ae-…</td><td>Acme Ltd</td><td>Gold</td></tr>
+        <tr><th colspan="3">Orders</th></tr>
+        <tr><td>a8eae15f-…</td><td>ORD-1001</td><td>Pending</td></tr>
+      </table>
+      <p class="muted" style="font-size:0.9rem">Verify steps read back through the same
+      pipeline — the seed data <b>asserts itself</b>. Teardown deletes in reverse
+      dependency order, from the manifest.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    <b>Takeaway:</b> QAs write data the way they write tests; verify closes the loop.
+    <b>Fallback:</b> the split-screen rows are from the repo's real manifest.
+    <b>Docs:</b> Guides → Daily use for QAs; Reference → Grammar.
+  </aside>
+</section>
+
+<!-- 5 ─ Determinism -->
+<section class="slide">
+  <span class="tag">Determinism</span>
+  <h2>Same seed → same data, <span class="k">byte for byte</span></h2>
+  <div class="cols">
+    <div class="panel">
+      <div class="mono muted">run 1 · laptop · @seed:42</div>
+<pre class="mono" style="margin:0.4rem 0 0"><code>"values": {
+  "OrderNumber": "ORD-1001",
+  "Status": "Pending",
+  "OrderDate": "2026-07-08T03:41:42.56",
+  "Total": "199.99" }</code></pre>
+    </div>
+    <div class="panel">
+      <div class="mono muted">run 2 · CI agent · @seed:42</div>
+<pre class="mono" style="margin:0.4rem 0 0"><code>"values": {
+  "OrderNumber": "ORD-1001",
+  "Status": "Pending",
+  "OrderDate": "2026-07-08T03:41:42.56",
+  "Total": "199.99" }</code></pre>
+    </div>
+  </div>
+  <ul>
+    <li>Every generated value — names, dates, totals, statistical draws — comes from the scenario seed</li>
+    <li><b>The manifest</b> records final values, seeds, routes and ids for every row: the audit artifact</li>
+    <li>Failures reproduce; baselines mean something; <code>tdm replay</code> re-creates a manifest exactly</li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> "deterministic under the scenario seed" — never "random test data".
+    <b>Fallback:</b> run `tdm run` twice locally, diff the manifests' values.
+    <b>Docs:</b> Reference → Reports &amp; the manifest.
+  </aside>
+</section>
+
+<!-- 6 ─ Natural keys -->
+<section class="slide">
+  <span class="tag">Natural keys — the concept</span>
+  <h2>"Acme Ltd" is the name your test <span class="k">means</span></h2>
+  <svg viewBox="0 0 900 190" style="width:100%;max-height:34vh" role="img"
+       aria-label="A step referencing Customer Acme Ltd resolves to the row whose natural key is Acme Ltd">
+    <rect class="boxline" x="10" y="60" width="330" height="64" rx="8"/>
+    <text x="30" y="88" class="mono" style="font-size:14px">an Order exists</text>
+    <text x="30" y="108" class="mono" style="font-size:14px">for Customer <tspan style="fill:var(--accent)">"Acme Ltd"</tspan></text>
+    <path class="edge" d="M340 92 h80" stroke-width="2" marker-end="url(#arr)"/>
+    <text x="352" y="80" class="m" style="font-size:12px">resolve by natural key</text>
+    <rect class="boxline" x="420" y="20" width="460" height="150" rx="8"/>
+    <text x="440" y="45" class="m mono" style="font-size:12px">Customers</text>
+    <g class="mono" style="font-size:13px">
+      <text x="440" y="75">29fa…  Globex Corp   Silver</text>
+      <rect x="432" y="88" width="436" height="26" rx="4" fill="none" stroke="var(--ok)" stroke-width="2"/>
+      <text x="440" y="106">e47c…  <tspan style="fill:var(--ok)">Acme Ltd</tspan>      Gold</text>
+      <text x="440" y="137">77b1…  Initech Ltd   Gold</text>
+    </g>
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
+  </svg>
+  <ul>
+    <li>Every entity has a <b>natural key</b> — the business identifier (<code>Name</code>, <code>OrderNumber</code>, <code>Sku</code>)</li>
+    <li>Steps reference by natural key; TDM resolves it wherever the row lives — this scenario, an earlier run, another domain</li>
+    <li>No surrogate-id bookkeeping in tests, ever</li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> tests speak business identifiers; TDM does the lookup. This slide sets up
+    the identity contract — the next one. <b>Fallback:</b> static diagram, nothing to fail.
+    <b>Docs:</b> Start here → Concepts (natural keys feed the identity contract).
+  </aside>
+</section>
+
+<!-- 7 ─ The identity contract -->
+<section class="slide">
+  <span class="tag">The identity contract</span>
+  <h2>Both teams derive the <span class="k">same id</span> — without talking</h2>
+  <div class="cols">
+    <div>
+      <pre class="block"><code>id = UUIDv5("{domain}|{Entity}|{naturalKey}")</code></pre>
+      <ul>
+        <li>Deterministic, name-based (RFC 4122 §4.3), under a frozen TDM namespace</li>
+        <li>Orders writes the customer; Billing references it — <b>identical GUID, zero coordination</b></li>
+        <li>The contract is versioned and frozen: a unit test pins the vector below</li>
+      </ul>
+      <p class="muted" style="font-size:0.85rem">Live derivation → runs right here in this
+      file, and must match <code>Tdm.Identity</code>'s frozen contract vector:
+      <span id="idx-selftest" class="mono warn">checking…</span></p>
+    </div>
+    <div class="panel">
+      <div class="mono muted" style="margin-bottom:0.5rem">identity explorer (mini)</div>
+      <label class="mono" style="font-size:0.8rem">domain
+        <input id="idx-domain" value="CRM" style="width:100%"></label>
+      <label class="mono" style="font-size:0.8rem">entity
+        <input id="idx-entity" value="Customer" style="width:100%"></label>
+      <label class="mono" style="font-size:0.8rem">natural key
+        <input id="idx-key" value="Acme Ltd" style="width:100%"></label>
+      <div class="mono" style="font-size:0.8rem;margin-top:0.6rem">
+        <span class="muted">canonical name</span><br><span id="idx-name"></span><br>
+        <span class="muted">uuid v5</span><br><b id="idx-uuid" class="accent"></b>
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    <b>Takeaway:</b> this is the conceptual centrepiece — coordination without communication.
+    <b>Fallback:</b> if the live inputs misbehave, the frozen vector is printed on the slide:
+    CRM|Customer|Acme Ltd → f629ad79-bbba-5d12-ae83-b8a8b9bf4ce0.
+    <b>Docs:</b> Guides → Multi-domain identity alignment; Concepts → the identity contract.
+  </aside>
+</section>
+
+<!-- 8 ─ Multi-domain reality -->
+<section class="slide">
+  <span class="tag">Multi-domain reality</span>
+  <h2>One application, <span class="k">many domains</span></h2>
+  <svg viewBox="0 0 920 300" style="width:100%;max-height:44vh" role="img"
+       aria-label="Three domains, each with its own API, DbContext and database, joined by identity edges">
+    <g>
+      <rect class="boxline" x="20"  y="30" width="260" height="200" rx="10"/>
+      <rect class="boxline" x="330" y="30" width="260" height="200" rx="10"/>
+      <rect class="boxline" x="640" y="30" width="260" height="200" rx="10"/>
+      <text x="150" y="58" text-anchor="middle" style="font-weight:600">Orders</text>
+      <text x="460" y="58" text-anchor="middle" style="font-weight:600">Billing</text>
+      <text x="770" y="58" text-anchor="middle" style="font-weight:600">Fulfilment</text>
+    </g>
+    <g class="mono" style="font-size:12px">
+      <g transform="translate(40,75)">
+        <rect class="boxline" width="220" height="30" rx="5"/><text x="12" y="20">Orders API</text>
+        <rect class="boxline" y="40" width="220" height="30" rx="5"/><text x="12" y="60">OrdersDbContext</text>
+        <rect class="boxline" y="80" width="220" height="55" rx="5"/>
+        <text x="12" y="102">orders-db</text><text x="12" y="122" class="m">Customer · Order · Product</text>
+      </g>
+      <g transform="translate(350,75)">
+        <rect class="boxline" width="220" height="30" rx="5"/><text x="12" y="20">Billing API</text>
+        <rect class="boxline" y="40" width="220" height="30" rx="5"/><text x="12" y="60">BillingDbContext</text>
+        <rect class="boxline" y="80" width="220" height="55" rx="5"/>
+        <text x="12" y="102">billing-db</text><text x="12" y="122" class="m">Account · Invoice · CustomerSummary</text>
+      </g>
+      <g transform="translate(660,75)">
+        <rect class="boxline" width="220" height="30" rx="5"/><text x="12" y="20">Fulfilment API</text>
+        <rect class="boxline" y="40" width="220" height="30" rx="5"/><text x="12" y="60">FulfilmentDbContext</text>
+        <rect class="boxline" y="80" width="220" height="55" rx="5"/>
+        <text x="12" y="102">fulfilment-db</text><text x="12" y="122" class="m">Shipment · Depot</text>
+      </g>
+    </g>
+    <g>
+      <path class="edge" d="M150 232 C 150 275, 460 275, 460 232" stroke-width="2" stroke-dasharray="6 4"/>
+      <path class="edge" d="M460 232 C 460 285, 770 285, 770 232" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="305" y="268" text-anchor="middle" class="m" style="font-size:12px">same UUIDv5 — no shared transaction</text>
+      <text x="615" y="290" text-anchor="middle" class="m" style="font-size:12px">external references · projections</text>
+    </g>
+  </svg>
+  <p>TDM seeds each domain through <b>its own plugin</b>; the identity contract keeps their
+  data agreeing. External references can be <b>synthesised, verified, or trusted</b> —
+  projections seed local read-models.</p>
+  <aside class="notes">
+    <b>Takeaway:</b> draw this picture early — every multi-domain feature only makes sense
+    against it. <b>Fallback:</b> static SVG. <b>Docs:</b> Guides → Multi-domain identity
+    alignment (interactive map version lands there).
+  </aside>
+</section>
+
+<!-- 9 ─ VS Code helper -->
+<section class="slide">
+  <span class="tag">Editor support</span>
+  <h2>Typos die in the editor, <span class="k">not at runtime</span></h2>
+  <svg viewBox="0 0 900 250" style="width:100%;max-height:40vh" role="img"
+       aria-label="Editor mock-up showing a squiggle on an unknown entity and a completion popup">
+    <rect class="boxline" x="10" y="10" width="880" height="230" rx="8"/>
+    <rect x="10" y="10" width="880" height="30" rx="8" fill="var(--line)"/>
+    <text x="30" y="30" class="mono" style="font-size:12px">orders-seeding.feature — tdm lsp</text>
+    <g class="mono" style="font-size:14px">
+      <text x="30" y="70" class="m">Scenario: Customer places an order</text>
+      <text x="30" y="100">  Given a Customer exists with name "Acme Ltd"</text>
+      <text x="30" y="130">  And an <tspan style="fill:var(--fail)">Ordr</tspan> exists for Customer "Acme Ltd"</text>
+      <path d="M96 136 q4 5 8 0 q4 -5 8 0 q4 5 8 0 q4 -5 8 0" stroke="var(--fail)" fill="none" stroke-width="1.6"/>
+      <text x="30" y="160">  And an Order exists with sta</text>
+    </g>
+    <rect class="boxline" x="290" y="168" width="300" height="62" rx="6"/>
+    <g class="mono" style="font-size:13px">
+      <rect x="294" y="174" width="292" height="22" rx="4" fill="var(--accent)" opacity="0.18"/>
+      <text x="304" y="190">status <tspan class="m">— Order property</tspan></text>
+      <text x="304" y="216">startedDate <tspan class="m">— Order property</tspan></text>
+    </g>
+    <rect class="boxline" x="480" y="112" width="380" height="34" rx="6"/>
+    <text x="492" y="134" class="mono" style="font-size:12px;fill:var(--fail)">unknown entity 'Ordr' — did you mean 'Order'?</text>
+  </svg>
+  <ul>
+    <li>Squiggles for unknown entities/properties in &lt;1s — validated against <b>your resolved schema</b> (<code>tdm export-model</code>)</li>
+    <li>Completion and hover from the same model; no database connection</li>
+    <li>One dotnet tool (<code>tdm lsp</code>): VS Code extension in-repo, works with <b>any LSP editor</b></li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> the #1 friction (typos becoming unmatched steps at runtime) is gone.
+    <b>Fallback:</b> the mock-up mirrors the real extension; demo lives in editors/vscode.
+    <b>Docs:</b> Guides → Editor setup.
+  </aside>
+</section>
+
+<!-- 10 ─ CI operation -->
+<section class="slide">
+  <span class="tag">CI operation</span>
+  <h2><code>tdm validate</code>: a gate that needs <span class="k">no database</span></h2>
+  <svg viewBox="0 0 900 230" style="width:100%;max-height:36vh" role="img"
+       aria-label="Pull request diff with an inline TDM SARIF annotation">
+    <rect class="boxline" x="10" y="10" width="880" height="210" rx="8"/>
+    <text x="30" y="38" class="mono" style="font-size:13px">Pull request #214 · features/billing.feature</text>
+    <g class="mono" style="font-size:13px">
+      <text x="30" y="72" class="m">@@ -6,4 +6,5 @@</text>
+      <text x="30" y="98"><tspan style="fill:var(--ok)">+  And an Invoice exists for Acount "A-1" with amount "250.00"</tspan></text>
+    </g>
+    <rect class="boxline" x="50" y="114" width="800" height="60" rx="6" stroke="var(--fail)"/>
+    <text x="66" y="138" style="font-size:13px"><tspan style="fill:var(--fail)">✗ tdm / validate</tspan>
+      <tspan class="m"> — SARIF annotation</tspan></text>
+    <text x="66" y="160" class="mono" style="font-size:12.5px">entity 'Acount' not found in domain Billing — nearest: 'Account'</text>
+    <text x="30" y="205" class="mono" style="font-size:13px"><tspan style="fill:var(--ok)">✓ build</tspan>   <tspan style="fill:var(--ok)">✓ tests</tspan>   <tspan style="fill:var(--fail)">✗ tdm validate</tspan>   <tspan class="m">JUnit → test tab</tspan></text>
+  </svg>
+  <ul>
+    <li>Grammar, entity resolution and <b>policy gates</b> checked before any data exists</li>
+    <li>SARIF → inline PR annotations · JUnit → the CI test tab · one composite GitHub Action</li>
+    <li>Exit codes 0/1/2 map to pass/warn/fail — pipelines need no parsing</li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> validate persists nothing — that's its whole appeal. This repo runs it on
+    every PR. <b>Fallback:</b> show the repo's own Actions tab.
+    <b>Docs:</b> Guides → CI: validate, report, gate.
+  </aside>
+</section>
+
+<!-- 11 ─ Reporting -->
+<section class="slide">
+  <span class="tag">Reporting &amp; audit</span>
+  <h2>Every run leaves <span class="k">evidence</span></h2>
+  <div class="cols">
+    <div>
+      <svg viewBox="0 0 420 210" style="width:100%" role="img"
+           aria-label="Reference lineage graph: Account to Invoice, external Customer to CustomerSummary projection">
+        <rect class="boxline" x="10" y="20" width="150" height="34" rx="6"/><text x="24" y="42" class="mono" style="font-size:12px">Account "A-1"</text>
+        <rect class="boxline" x="240" y="20" width="170" height="34" rx="6"/><text x="254" y="42" class="mono" style="font-size:12px">Invoice "INV-001"</text>
+        <rect class="boxline" x="10" y="120" width="190" height="46" rx="6" stroke-dasharray="5 3"/>
+        <text x="24" y="140" class="mono" style="font-size:12px">Customer "Acme Ltd"</text>
+        <text x="24" y="156" class="m" style="font-size:10.5px">external · owned by Orders</text>
+        <rect class="boxline" x="240" y="126" width="170" height="34" rx="6"/><text x="254" y="148" class="mono" style="font-size:12px">CustomerSummary</text>
+        <path class="edge" d="M160 37 h74" stroke-width="1.8" marker-end="url(#arr2)"/>
+        <path class="edge" d="M200 143 h34" stroke-width="1.8" marker-end="url(#arr2)"/>
+        <path class="edge" d="M205 120 C 250 90, 260 70, 268 58" stroke-width="1.8" stroke-dasharray="5 3" marker-end="url(#arr2)"/>
+        <text x="215" y="95" class="m" style="font-size:10.5px">same UUIDv5</text>
+        <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
+      </svg>
+      <p class="muted" style="font-size:0.85rem">Reference lineage from the repo's real
+      cross-domain scenario — who points at whom, resolved from where.</p>
+    </div>
+    <div>
+      <ul>
+        <li><b>The living HTML report</b>: run header, scenario drill-down, lineage graph,
+          benchmark charts, trend sparklines — one self-contained file, opens from <code>file://</code></li>
+        <li><b>Audit posture</b>: SHA-256 checksum always; optional detached signature;
+          attribution (runner, git SHA, settings hash) in every manifest</li>
+        <li><b>Attestation</b>: a per-run statement that no production data was used</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    <b>Takeaway:</b> the report you're seeing this deck's posture borrowed from — single file,
+    zero network. <b>Fallback:</b> open output/*.html from any repo run.
+    <b>Docs:</b> Reference → Reports &amp; the manifest.
+  </aside>
+</section>
+
+<!-- 12 ─ Statistical generation -->
+<section class="slide">
+  <span class="tag">Statistical generation</span>
+  <h2>Perf data that looks like prod — <span class="k">without being prod</span></h2>
+  <div class="cols">
+    <div>
+<pre class="block"><code>"Order": {
+  "properties": {
+    "Status": { "weights": {
+      "Pending": 0.6, "Shipped": 0.3,
+      "Cancelled": 0.1 } },
+    "Total": { "distribution": "lognormal",
+               "mean": 120, "sigma": 1.2 }
+} }</code></pre>
+      <p class="muted" style="font-size:0.9rem">Declarative config, applied over the faker —
+      every draw from the scenario seed. Step overrides still win.</p>
+    </div>
+    <div>
+      <svg viewBox="0 0 400 210" style="width:100%" role="img"
+           aria-label="Bar chart comparing declared weights 60/30/10 with observed shares over ten thousand orders">
+        <g style="font-size:11px">
+          <rect x="60"  y="30"  width="204" height="18" fill="var(--accent)"/>
+          <rect x="60"  y="52"  width="199" height="18" fill="var(--accent)" opacity="0.45"/>
+          <text x="60" y="24">Pending</text><text x="270" y="44" class="mono">60% → 59.8%</text>
+          <rect x="60"  y="90"  width="102" height="18" fill="var(--accent)"/>
+          <rect x="60"  y="112" width="103" height="18" fill="var(--accent)" opacity="0.45"/>
+          <text x="60" y="84">Shipped</text><text x="170" y="104" class="mono">30% → 30.3%</text>
+          <rect x="60"  y="150" width="34"  height="18" fill="var(--accent)"/>
+          <rect x="60"  y="172" width="34"  height="18" fill="var(--accent)" opacity="0.45"/>
+          <text x="60" y="144">Cancelled</text><text x="102" y="164" class="mono">10% → 9.9%</text>
+          <text x="60" y="205" class="m">solid = declared · faded = observed, 10,000 orders, one seed</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+  <ul>
+    <li>10k orders land within ~2% of declared weights — and <b>identically on the same seed</b></li>
+    <li>Correlated datasets keep city ↔ postcode ↔ country consistent per row</li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> realistic shape and reproducibility are not a trade-off here.
+    <b>Fallback:</b> the distribution playground (docs, W5-P4) shows this live with sliders.
+    <b>Docs:</b> Guides → Statistical generation; Reference → Configuration → entities.
+  </aside>
+</section>
+
+<!-- 13 ─ Realism, safely -->
+<section class="slide">
+  <span class="tag">Realism, safely</span>
+  <h2><code>tdm profile</code>: shapes from production, <span class="k">never rows</span></h2>
+  <table class="simple" style="font-size:1.05rem">
+    <tr><th class="ok">captures</th><th class="fail">refuses</th></tr>
+    <tr><td>per-column distributions (mean, σ, shape)</td><td>row values — ever</td></tr>
+    <tr><td>cardinalities &amp; null rates</td><td>identifiers, free text</td></tr>
+    <tr><td>categorical weights (≤10 distinct values)</td><td>category labels too, with <code>--no-values</code></td></tr>
+    <tr><td>correlation hints</td><td>anything without a read-only connection</td></tr>
+  </table>
+  <ul style="margin-top:1rem">
+    <li>Output is a <b>statistics pack</b> → feeds straight into the config on the previous slide</li>
+    <li>Declared packs are recorded in every manifest's attribution — <b>the audit trail stays honest</b></li>
+    <li>Spike posture: prototype, data-protection review required before real production use</li>
+  </ul>
+  <aside class="notes">
+    <b>Takeaway:</b> half of TDM's value is NOT needing production data; profile keeps it that
+    way while borrowing realism. <b>Fallback:</b> static table.
+    <b>Docs:</b> Guides → Profiling production shapes.
+  </aside>
+</section>
+
+<!-- 14 ─ Deeper dive menu -->
+<section class="slide">
+  <span class="tag">Deeper dive menu</span>
+  <h2>What a follow-up session covers</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem 1.5rem;font-size:1.02rem">
+    <div class="panel">Environment policy &amp; approvals — <span class="muted">rules as code, tokens for exceptions</span></div>
+    <div class="panel">Run registry + environment locks — <span class="muted">who seeded what, where; no collisions</span></div>
+    <div class="panel">Secrets chain — <span class="muted">inline → env → vault; TDM stores nothing</span></div>
+    <div class="panel">Replay &amp; drift verify — <span class="muted">the manifest as playback and probe</span></div>
+    <div class="panel">Resumable runs — <span class="muted">crash-safe journal, skip proven work</span></div>
+    <div class="panel">Trend store + perf gates — <span class="muted">p95 regressions fail the pipeline</span></div>
+    <div class="panel">API seeding — <span class="muted">through the domain's HTTP API, validation included</span></div>
+    <div class="panel">Seed packs — <span class="muted">"EU reference customers v2" as a dependency</span></div>
+    <div class="panel">Provider plugins — <span class="muted">SQLite · SQL Server · PostgreSQL, one feature set</span></div>
+    <div class="panel">Agent kit — <span class="muted">AGENTS.md + skills: TDM legible to AI coders</span></div>
+  </div>
+  <aside class="notes">
+    <b>Takeaway:</b> everything here is shipped and documented — pick three for the deep dive.
+    <b>Fallback:</b> each line maps to a docs guide; open any live.
+    <b>Docs:</b> Guides index — every item links from the home page persona router.
+  </aside>
+</section>
+
+<!-- 15 ─ Getting started -->
+<section class="slide">
+  <div class="cols" style="align-items:center;height:100%">
+    <div>
+      <h2>15 minutes to your first <span class="ok">green run</span></h2>
+      <ol style="font-size:1.1rem;line-height:1.9">
+        <li><code>dotnet tool install --global Tdm.Tool</code></li>
+        <li><code>tdm init</code> → annotated settings + starter feature + CI workflow</li>
+        <li><code>tdm validate</code> → green, before any database exists</li>
+        <li><code>tdm run</code> → manifest + HTML report in <code>./output</code></li>
+      </ol>
+      <p style="font-size:1.1rem">Docs: <b class="accent mono">chrisw000.github.io/test-data-manager</b><br>
+      <span class="muted">Every command in the Getting Started guide is executed by CI on every
+      push — the docs cannot drift.</span></p>
+      <p><b>Bring a domain to the deep dive</b> — we'll seed it live.</p>
+    </div>
+    <div style="flex:0 0 220px;color:var(--fg)">
+      <svg viewBox="0 0 33 33" shape-rendering="crispEdges" style="width:220px;height:220px;background:#fff;padding:12px;border-radius:8px;box-sizing:border-box"><path d="M0 0h7v1h-7zM9 0h4v1h-4zM14 0h1v1h-1zM18 0h1v1h-1zM21 0h1v1h-1zM26 0h7v1h-7zM0 1h1v1h-1zM6 1h1v1h-1zM8 1h4v1h-4zM13 1h2v1h-2zM17 1h1v1h-1zM21 1h1v1h-1zM26 1h1v1h-1zM32 1h1v1h-1zM0 2h1v1h-1zM2 2h3v1h-3zM6 2h1v1h-1zM8 2h3v1h-3zM13 2h1v1h-1zM15 2h4v1h-4zM20 2h2v1h-2zM23 2h2v1h-2zM26 2h1v1h-1zM28 2h3v1h-3zM32 2h1v1h-1zM0 3h1v1h-1zM2 3h3v1h-3zM6 3h1v1h-1zM8 3h2v1h-2zM12 3h1v1h-1zM21 3h2v1h-2zM26 3h1v1h-1zM28 3h3v1h-3zM32 3h1v1h-1zM0 4h1v1h-1zM2 4h3v1h-3zM6 4h1v1h-1zM15 4h1v1h-1zM17 4h2v1h-2zM21 4h1v1h-1zM23 4h1v1h-1zM26 4h1v1h-1zM28 4h3v1h-3zM32 4h1v1h-1zM0 5h1v1h-1zM6 5h1v1h-1zM10 5h2v1h-2zM14 5h1v1h-1zM16 5h1v1h-1zM18 5h1v1h-1zM20 5h3v1h-3zM26 5h1v1h-1zM32 5h1v1h-1zM0 6h7v1h-7zM8 6h1v1h-1zM10 6h1v1h-1zM12 6h1v1h-1zM14 6h1v1h-1zM16 6h1v1h-1zM18 6h1v1h-1zM20 6h1v1h-1zM22 6h1v1h-1zM24 6h1v1h-1zM26 6h7v1h-7zM8 7h3v1h-3zM14 7h1v1h-1zM18 7h1v1h-1zM22 7h1v1h-1zM0 8h1v1h-1zM6 8h1v1h-1zM8 8h1v1h-1zM12 8h6v1h-6zM20 8h1v1h-1zM25 8h2v1h-2zM29 8h3v1h-3zM0 9h1v1h-1zM4 9h1v1h-1zM9 9h1v1h-1zM15 9h1v1h-1zM19 9h1v1h-1zM21 9h1v1h-1zM23 9h1v1h-1zM28 9h3v1h-3zM2 10h1v1h-1zM6 10h2v1h-2zM9 10h1v1h-1zM11 10h1v1h-1zM15 10h2v1h-2zM18 10h1v1h-1zM20 10h1v1h-1zM22 10h1v1h-1zM25 10h2v1h-2zM28 10h1v1h-1zM30 10h2v1h-2zM2 11h4v1h-4zM7 11h6v1h-6zM14 11h3v1h-3zM22 11h1v1h-1zM24 11h2v1h-2zM27 11h5v1h-5zM0 12h2v1h-2zM6 12h1v1h-1zM8 12h1v1h-1zM12 12h3v1h-3zM16 12h3v1h-3zM20 12h3v1h-3zM24 12h1v1h-1zM26 12h2v1h-2zM2 13h3v1h-3zM7 13h2v1h-2zM10 13h2v1h-2zM14 13h1v1h-1zM16 13h1v1h-1zM20 13h1v1h-1zM23 13h1v1h-1zM26 13h2v1h-2zM29 13h4v1h-4zM3 14h1v1h-1zM5 14h2v1h-2zM8 14h1v1h-1zM11 14h2v1h-2zM19 14h1v1h-1zM21 14h1v1h-1zM25 14h2v1h-2zM30 14h2v1h-2zM1 15h1v1h-1zM3 15h3v1h-3zM7 15h1v1h-1zM9 15h2v1h-2zM12 15h1v1h-1zM15 15h1v1h-1zM19 15h1v1h-1zM22 15h2v1h-2zM25 15h1v1h-1zM27 15h1v1h-1zM29 15h2v1h-2zM32 15h1v1h-1zM3 16h7v1h-7zM11 16h1v1h-1zM17 16h1v1h-1zM19 16h1v1h-1zM24 16h2v1h-2zM27 16h2v1h-2zM32 16h1v1h-1zM1 17h2v1h-2zM7 17h2v1h-2zM10 17h1v1h-1zM12 17h4v1h-4zM17 17h7v1h-7zM26 17h1v1h-1zM29 17h2v1h-2zM32 17h1v1h-1zM0 18h1v1h-1zM5 18h2v1h-2zM8 18h4v1h-4zM15 18h1v1h-1zM19 18h1v1h-1zM23 18h5v1h-5zM29 18h4v1h-4zM0 19h2v1h-2zM3 19h3v1h-3zM12 19h2v1h-2zM15 19h7v1h-7zM23 19h3v1h-3zM28 19h3v1h-3zM1 20h3v1h-3zM5 20h7v1h-7zM13 20h1v1h-1zM16 20h1v1h-1zM20 20h3v1h-3zM24 20h2v1h-2zM27 20h3v1h-3zM31 20h1v1h-1zM0 21h2v1h-2zM3 21h3v1h-3zM10 21h1v1h-1zM14 21h1v1h-1zM16 21h1v1h-1zM18 21h1v1h-1zM20 21h1v1h-1zM22 21h2v1h-2zM28 21h1v1h-1zM30 21h1v1h-1zM0 22h1v1h-1zM2 22h6v1h-6zM11 22h2v1h-2zM14 22h5v1h-5zM20 22h2v1h-2zM29 22h3v1h-3zM0 23h1v1h-1zM3 23h3v1h-3zM7 23h2v1h-2zM10 23h2v1h-2zM18 23h1v1h-1zM24 23h3v1h-3zM29 23h2v1h-2zM32 23h1v1h-1zM0 24h3v1h-3zM4 24h3v1h-3zM11 24h1v1h-1zM13 24h4v1h-4zM18 24h3v1h-3zM22 24h7v1h-7zM8 25h1v1h-1zM12 25h1v1h-1zM15 25h2v1h-2zM18 25h3v1h-3zM22 25h3v1h-3zM28 25h1v1h-1zM30 25h3v1h-3zM0 26h7v1h-7zM9 26h2v1h-2zM13 26h1v1h-1zM15 26h2v1h-2zM18 26h1v1h-1zM21 26h1v1h-1zM23 26h2v1h-2zM26 26h1v1h-1zM28 26h1v1h-1zM30 26h2v1h-2zM0 27h1v1h-1zM6 27h1v1h-1zM9 27h2v1h-2zM12 27h2v1h-2zM16 27h1v1h-1zM19 27h1v1h-1zM23 27h2v1h-2zM28 27h4v1h-4zM0 28h1v1h-1zM2 28h3v1h-3zM6 28h1v1h-1zM9 28h1v1h-1zM11 28h1v1h-1zM13 28h1v1h-1zM18 28h2v1h-2zM21 28h1v1h-1zM24 28h6v1h-6zM0 29h1v1h-1zM2 29h3v1h-3zM6 29h1v1h-1zM9 29h1v1h-1zM11 29h1v1h-1zM13 29h1v1h-1zM16 29h2v1h-2zM20 29h1v1h-1zM22 29h1v1h-1zM24 29h2v1h-2zM27 29h4v1h-4zM32 29h1v1h-1zM0 30h1v1h-1zM2 30h3v1h-3zM6 30h1v1h-1zM9 30h3v1h-3zM13 30h2v1h-2zM16 30h1v1h-1zM20 30h4v1h-4zM25 30h1v1h-1zM27 30h6v1h-6zM0 31h1v1h-1zM6 31h1v1h-1zM12 31h1v1h-1zM15 31h2v1h-2zM18 31h3v1h-3zM25 31h6v1h-6zM0 32h7v1h-7zM8 32h2v1h-2zM11 32h4v1h-4zM17 32h1v1h-1zM19 32h1v1h-1zM23 32h2v1h-2zM26 32h2v1h-2zM31 32h1v1h-1z" fill="#000"/></svg>
+      <div class="m" style="text-align:center;font-size:0.75rem;margin-top:0.4rem;color:var(--muted)">scan for the docs site</div>
+    </div>
+  </div>
+  <aside class="notes">
+    <b>Takeaway:</b> the ask — try the 15-minute path this week, bring a domain to the deep
+    dive. <b>Fallback:</b> read the URL aloud; it's also in the meeting invite.
+    <b>Docs:</b> Start here → Getting started.
+  </aside>
+</section>
+
+</main>
+
+<footer id="hud">
+  <span id="counter" class="mono">1 / 15</span>
+  <span>← → navigate · Home/End jump · <b>S</b> speaker notes · print → PDF (one slide per page)</span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ── deck navigation ─────────────────────────────────────────────────── */
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var counter = document.getElementById("counter");
+  var current = 0;
+
+  function show(i) {
+    current = Math.max(0, Math.min(i, slides.length - 1));
+    slides.forEach(function (s, j) { s.classList.toggle("current", j === current); });
+    counter.textContent = (current + 1) + " / " + slides.length;
+    if (history.replaceState) history.replaceState(null, "", "#" + (current + 1));
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === "INPUT") return;
+    switch (e.key) {
+      case "ArrowRight": case "PageDown": case " ": show(current + 1); e.preventDefault(); break;
+      case "ArrowLeft": case "PageUp": show(current - 1); e.preventDefault(); break;
+      case "Home": show(0); break;
+      case "End": show(slides.length - 1); break;
+      case "s": case "S": document.body.classList.toggle("show-notes"); break;
+    }
+  });
+
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+
+  /* ── identity mini-explorer (slide 7) ────────────────────────────────────
+     Pure-JS RFC 4122 §4.3 UUIDv5 under the frozen Tdm.Identity namespace.
+     Must reproduce the frozen contract vector from TdmIdentityTests:
+     CRM|Customer|Acme Ltd → f629ad79-bbba-5d12-ae83-b8a8b9bf4ce0. */
+
+  function sha1(bytes) {
+    var ml = bytes.length;
+    var total = Math.ceil((ml + 9) / 64) * 64;
+    var msg = new Uint8Array(total);
+    msg.set(bytes);
+    msg[ml] = 0x80;
+    var dv = new DataView(msg.buffer);
+    var bitLen = ml * 8;
+    dv.setUint32(total - 8, Math.floor(bitLen / 0x100000000));
+    dv.setUint32(total - 4, bitLen >>> 0);
+    var h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    var w = new Uint32Array(80);
+    for (var i = 0; i < total; i += 64) {
+      for (var j = 0; j < 16; j++) w[j] = dv.getUint32(i + j * 4);
+      for (j = 16; j < 80; j++) { var n = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16]; w[j] = (n << 1) | (n >>> 31); }
+      var a = h0, b = h1, c = h2, d = h3, e = h4, f, k, t;
+      for (j = 0; j < 80; j++) {
+        if (j < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+        else if (j < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+        else if (j < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+        t = (((a << 5) | (a >>> 27)) + f + e + k + w[j]) >>> 0;
+        e = d; d = c; c = ((b << 30) | (b >>> 2)) >>> 0; b = a; a = t;
+      }
+      h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+    }
+    var out = new Uint8Array(20);
+    var odv = new DataView(out.buffer);
+    odv.setUint32(0, h0); odv.setUint32(4, h1); odv.setUint32(8, h2); odv.setUint32(12, h3); odv.setUint32(16, h4);
+    return out;
+  }
+
+  // Tdm.Identity namespace GUID in network byte order (frozen — contract v1).
+  var NAMESPACE = [0x8f, 0x1b, 0x9c, 0x6e, 0x2a, 0x4d, 0x5e, 0x7f,
+                   0x9b, 0x3c, 0x6d, 0x8e, 0x0f, 0x2a, 0x4b, 0x5c];
+
+  function uuidv5(name) {
+    var nameBytes = new TextEncoder().encode(name);
+    var input = new Uint8Array(16 + nameBytes.length);
+    input.set(NAMESPACE);
+    input.set(nameBytes, 16);
+    var h = sha1(input);
+    h[6] = (h[6] & 0x0f) | 0x50;   // version 5
+    h[8] = (h[8] & 0x3f) | 0x80;   // RFC 4122 variant
+    var hex = [];
+    for (var i = 0; i < 16; i++) hex.push((h[i] + 0x100).toString(16).slice(1));
+    return hex.slice(0, 4).join("") + "-" + hex[4] + hex[5] + "-" + hex[6] + hex[7] + "-" +
+           hex[8] + hex[9] + "-" + hex.slice(10, 16).join("");
+  }
+
+  var dom = document.getElementById("idx-domain"),
+      ent = document.getElementById("idx-entity"),
+      key = document.getElementById("idx-key"),
+      nameOut = document.getElementById("idx-name"),
+      uuidOut = document.getElementById("idx-uuid"),
+      selfTest = document.getElementById("idx-selftest");
+
+  function refresh() {
+    var name = dom.value + "|" + ent.value + "|" + key.value;
+    nameOut.textContent = name;
+    uuidOut.textContent = uuidv5(name);
+  }
+  [dom, ent, key].forEach(function (el) { el.addEventListener("input", refresh); });
+  refresh();
+
+  var VECTOR = "f629ad79-bbba-5d12-ae83-b8a8b9bf4ce0";
+  if (uuidv5("CRM|Customer|Acme Ltd") === VECTOR) {
+    selfTest.textContent = "contract vector verified ✓";
+    selfTest.className = "mono ok";
+  } else {
+    selfTest.textContent = "CONTRACT VECTOR MISMATCH ✗";
+    selfTest.className = "mono fail";
+  }
+})();
+</script>
+</body>
+</html>
