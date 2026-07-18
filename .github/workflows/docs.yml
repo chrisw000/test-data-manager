@@ -1,8 +1,12 @@
 name: Docs site
 
-# W1-D5: /docs-site published to GitHub Pages on release (manual dispatch for the first
-# publish / content fixes). Requires Pages source = "GitHub Actions" in repo settings.
+# W1-D5: /docs-site published to GitHub Pages. W5-P1 adds deploy-on-push for docs paths —
+# release-only cadence hid new guides (wave risk table). Requires Pages source =
+# "GitHub Actions" in repo settings.
 on:
+  push:
+    branches: [main]
+    paths: ['docs-site/**']
   release:
     types: [published]
   workflow_dispatch:

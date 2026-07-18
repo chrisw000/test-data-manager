@@ -12,19 +12,57 @@ theme:
       toggle: { icon: material/brightness-4, name: Light mode }
   features:
     - navigation.sections
+    - navigation.top
     - content.code.copy
 
+# W5-D2: persona-first IA — routed home, Start here, task-first guides (filled by
+# W5-P3..P5), reference. Guides carry tour_prev/tour_next front matter; lint-tour.sh
+# asserts the guided-tour chain is a single unbroken path.
 nav:
   - Home: index.md
-  - Grammar reference: grammar.md
-  - Configuration reference: configuration.md
-  - Convention profiles: profiles.md
-  - Plugin packaging guide: plugin-packaging.md
-  - Troubleshooting: troubleshooting.md
-  - Decision log: decisions.md
+  - Start here:
+      - Getting started: start/getting-started.md
+      - Concepts: start/concepts.md
+      - Guided tour: start/tour.md
+  - Guides:
+      - Daily use for QAs: guides/daily-use-qa.md
+      - Daily use for developers: guides/daily-use-dev.md
+      - Editor setup: guides/editor-setup.md
+      - CI — validate, report, gate: guides/ci.md
+      - CD & environments: guides/cd-environments.md
+      - Performance testing & tracking: guides/performance-testing.md
+      - Statistical generation: guides/statistical-generation.md
+      - Profiling production shapes: guides/profiling-production-shapes.md
+      - Multi-domain identity alignment: guides/multi-domain-identity.md
+      - API seeding: guides/api-seeding.md
+      - Seed packs: guides/seed-packs.md
+      - TestContainers & the provider matrix: guides/testcontainers.md
+      - Testing complex domains: guides/complex-domains.md
+  - Reference:
+      - Grammar: reference/grammar.md
+      - Configuration: reference/configuration.md
+      - Convention profiles: reference/profiles.md
+      - CLI: reference/cli.md
+      - Reports & the manifest: reference/reports-and-manifest.md
+      - Plugin packaging: reference/plugin-packaging.md
+      - Troubleshooting: reference/troubleshooting.md
+      - Decision log: reference/decisions.md
 
 markdown_extensions:
   - admonition
   - tables
+  - attr_list
+  - md_in_html
   - toc:
       permalink: true
+  # W5-D4: guide commands are included from docs-site/snippets/*.sh — the same files
+  # the docs-verify CI job executes against the sample workspace. check_paths makes a
+  # missing snippet a build error, not a silently empty code block.
+  - pymdownx.snippets:
+      base_path: ['docs-site/snippets', 'snippets']
+      check_paths: true
+
+extra_css:
+  - assets/interactive/pipeline-walkthrough.css
+extra_javascript:
+  - assets/interactive/pipeline-walkthrough.js

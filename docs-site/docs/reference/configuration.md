@@ -80,9 +80,39 @@ TDM handles no secrets.
   "externalReferences": "Synthesize",         // Synthesize | Verify | Trust
   "verifyEndpoint": "https://crm/api/{entity}/{id}",  // Verify mode URL template
   "ensureCreated": true,                      // create schema on first use — local/demo only
-  "maxParallelScenarios": 1                   // optional cap on run.maxParallelScenarios for this domain
+  "maxParallelScenarios": 1,                  // optional cap on run.maxParallelScenarios for this domain
+  "locale": "en_GB",                          // Bogus vocabulary for generated names/addresses (W4-D5); determinism unchanged
+  "api": { … }                                // seed via the domain's HTTP API instead of its DbContext — see below
 }]
 ```
+
+### domains[].api — API seeding (W4-D6)
+
+With `"persistence": "Api"`, seeding routes through the domain's public HTTP API — which
+exercises its validation, auth and side-effects for free. Supported lifecycles:
+`Persistent` and `TrackedTeardown` (deletes via API, reverse order); `Transactional`
+fails validation.
+
+```jsonc
+"api": {
+  "baseUrl": "https://orders.internal",
+  "auth": { … },                       // header/bearer schemes; secrets via the secrets chain
+  "timeoutSeconds": 30,
+  "maxRetries": 2,                     // per request, on 5xx/connection failure
+  "retryDelayMs": 200,
+  "entities": {                        // this map IS the domain's entity list in Api mode
+    "Customer": {
+      "create": "POST /api/customers",
+      "read":   "GET /api/customers?name={key}",   // {id} = key value, {key} = URL-escaped natural key
+      "delete": "DELETE /api/customers/{id}"
+    }
+  }
+}
+```
+
+See the [API seeding guide](../guides/api-seeding.md) and
+[api-seeding.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/api-seeding.md)
+(engineering record).
 
 ## entities
 
@@ -105,6 +135,77 @@ Per-entity overrides, keyed by logical name:
 | `writeRepository` | Explicit write-repository interface name when the probe patterns don't fit |
 | `externalBehavior` | `FkOnly` \| `Projection` (seed a local read-model row for external refs) |
 | `projectionEntity` | Logical name of the projection row seeded in `Projection` mode |
+| `properties` | Per-property statistical generation — see below |
+
+### entities.{X}.properties — statistical generation (W4-D4)
+
+Declarative distributions applied over the faker's output, drawn from the per-scenario
+seed — realistic shapes, still deterministic. Step overrides always win. Exactly one of
+`distribution`, `weights` or `dataset` per property:
+
+```jsonc
+"Order": {
+  "naturalKey": "OrderNumber",
+  "properties": {
+    "Status": { "weights": { "Pending": 0.6, "Shipped": 0.3, "Cancelled": 0.1 } },
+    "Total":  { "distribution": "lognormal", "mean": 120, "sigma": 1.2 },
+    "City":   { "dataset": "uk-places", "column": "City" }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `distribution` | `normal` \| `lognormal` \| `uniform` \| `exponential` |
+| `mean` | normal: the mean · lognormal: the **median** (scale, `exp(μ)`) · exponential: the mean (`1/rate`) |
+| `sigma` | normal: standard deviation · lognormal: σ of the underlying normal |
+| `min` / `max` | uniform bounds; an optional clamp for the others |
+| `decimals` | rounding for floating targets (default 2); integer targets round whole |
+| `weights` | categorical value → relative weight (normalised at sample time) |
+| `dataset` / `column` | fill from a named [dataset](#datasets) row; column defaults to the property name |
+
+Engineering record:
+[statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/statistical-generation.md).
+
+## datasets
+
+Named CSV files (first row = header, paths relative to the settings file) whose rows are
+sampled **whole** — all properties of one entity naming the same dataset are filled from
+a single sampled row, so city ↔ postcode ↔ country stay consistent (W4-D5):
+
+```jsonc
+"datasets": {
+  "uk-places": { "path": "./datasets/uk-places.csv" }
+}
+```
+
+## seedPacks
+
+Versioned packages of feature files + entity-config fragments + key-registry entries,
+executed **before** local features (pack list order, alphabetical within) — "EU reference
+customers v2" becomes a dependency, not a copy-paste (W4-D7). NuGet packs ride the plugin
+feeds and are pinned in `tdm.plugins.lock.json`; a local `path` wins for development:
+
+```jsonc
+"seedPacks": [
+  { "package": "Acme.SeedPacks.EuCustomers", "version": "2.*" },
+  { "path": "../shared-packs/eu-customers" }
+]
+```
+
+Pack layout: `features/*.feature`, optional `tdm.entities.json` fragment, optional
+`tdm.keys.json` registry, optional `datasets/`. Applied packs and versions are recorded
+in each manifest's `run.seedPacks`. See the [seed packs guide](../guides/seed-packs.md).
+
+## statsPacks
+
+Paths of [`tdm profile`](cli.md#tdm-profile) statistics packs whose derived config this
+workspace uses (W4-D8). Declared so every run's attribution records them (name + content
+hash) — the attestation posture stays truthful about production-derived shapes:
+
+```jsonc
+"statsPacks": ["./tdm.stats.json"]
+```
 
 ## secrets
 
@@ -154,24 +255,13 @@ needed, never overridable.
 
 ## CLI
 
-| Command | Purpose |
-|---|---|
-| `tdm init [--domain X --package Y]` | Scaffold settings, starter feature, .gitignore, CI workflow |
-| `tdm validate [--report sarif=…] [--update-plugins]` | Parse + resolve everything, persist nothing; policy gate; exit 0/1/2 |
-| `tdm run [--seed N] [--policy P] [--lifecycle L] [--benchmark] [--report …] [--resume <journal>]` | Seed and write the manifest (+ a crash-safe `.tdm.journal.jsonl`; `--resume` skips journal-proven work, W3-D6) |
-| `tdm teardown --manifest <file>` | Delete manifest-recorded rows in reverse order |
-| `tdm list-entities [--domain X]` | Resolved entity → CLR type, keys, faker, write/read repository |
-| `tdm explain "<step text>" [--keyword When]` | Every pipeline decision for one step; no DB connection |
-| `tdm manifest verify <file> [--cert <public-cert>]` | Check a manifest's checksum and, if present, signature — see [audit-and-signing](https://github.com/chrisw000/test-data-manager/blob/main/docs/audit-and-signing.md) |
-| `tdm replay --manifest <file>` | Re-create exactly the rows a manifest records — final values, not fakers (W2-D9) |
-| `tdm verify --manifest <file>` | Drift check: every recorded row still exists with its recorded values; exit 0/1 |
-| `tdm bench tune [--domain X --entity Y --rows N]` | Measure bulk-insert throughput across chunk sizes; write the best into `run.bulkChunkSize` (W3-D3) |
-| `tdm publish --manifest <file> --store <root> [--env E]` | Push a manifest to the trend store (`{env}/{run}/{timestamp}` + index, W3-D7) |
-| `tdm bench compare --manifest <file> (--store <root> \| --baseline <file>) [--env E] [--quarantine] [--report junit=…]` | Judge a run against a rolling-median or pinned baseline; policy perf gates fail the pipeline on regression (W3-D8) |
+Every command and option lives on the dedicated [CLI reference](cli.md), which docs-CI
+drift-checks against the live `tdm --help` output. A composite GitHub Action wrapping
+validate/run/report ships in-repo at `.github/actions/tdm` — see the
+[CI guide](../guides/ci.md).
 
-`--env`, `--policy-file`, `--approval` (on run/validate): environment-policy enforcement —
-see policy as code below.
+## Where next
 
-`--report <format>=<path>` (repeatable, on run/validate): `sarif` for PR annotations,
-`junit` for CI test UIs. A composite GitHub Action wrapping all of this ships in-repo at
-`.github/actions/tdm`.
+- [CLI reference](cli.md) — the switches that override these settings per run.
+- [Convention profiles](profiles.md) — what `conventionProfile` selects.
+- [Reports & the manifest](reports-and-manifest.md) — where `outputPath` artifacts come from.

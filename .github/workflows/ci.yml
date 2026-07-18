@@ -66,6 +66,41 @@ jobs:
           path: output/tdm-validate.junit.xml
           if-no-files-found: ignore
 
+  # Snippet-verification harness (W5-D4): every command the guides show is an executable
+  # file under docs-site/snippets/, included into the pages via pymdownx.snippets and
+  # executed here against the sample workspace (SQLite) — a guide that breaks fails the PR.
+  # `mkdocs build --strict` runs here too (not only at deploy time), so broken links and
+  # missing snippet files fail PRs as well.
+  docs-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (warnings are errors)
+        run: dotnet build --no-restore -warnaserror
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build site (strict)
+        run: |
+          pip install mkdocs-material
+          mkdocs build -f docs-site/mkdocs.yml --site-dir "${{ runner.temp }}/_site" --strict
+
+      - name: Guided-tour chain lint
+        run: bash docs-site/lint-tour.sh
+
+      - name: Execute guide snippets against the sample workspace
+        run: bash docs-site/run-snippets.sh
+
   # Provider container matrix (W3-P3): the same EfCore + integration suites run against
   # SQL Server and PostgreSQL via Testcontainers (SQLite is the default leg above).
   provider-matrix:

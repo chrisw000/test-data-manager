@@ -1,0 +1,79 @@
+/* W5-D5 pipeline walkthrough. Colours come from Material's own CSS variables, so the
+ * component follows the light/dark palette toggle with no scheme-specific rules. */
+#tdm-pipeline-walkthrough {
+  margin: 1.5em 0;
+}
+
+.tdm-pw-stages {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.15em;
+  padding-bottom: 0.5em;
+}
+
+.tdm-pw-stage-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  flex: 0 0 auto;
+}
+
+.tdm-pw-stage {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.35em 0.7em;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 1em;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tdm-pw-stage:hover,
+.tdm-pw-stage:focus-visible {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.tdm-pw-stage.tdm-pw-active {
+  background: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+.tdm-pw-arrow {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.72rem;
+}
+
+.tdm-pw-panel {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2em;
+  padding: 0.8em 1em;
+}
+
+.tdm-pw-title {
+  margin: 0 0 0.4em !important;
+  font-size: 0.9rem !important;
+}
+
+.tdm-pw-body {
+  margin: 0 0 0.8em;
+  font-size: 0.72rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.tdm-pw-artifact-label {
+  font-size: 0.64rem;
+  font-family: var(--md-code-font-family, monospace);
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 0.3em;
+}
+
+.tdm-pw-artifact {
+  margin: 0;
+  overflow-x: auto;
+}
