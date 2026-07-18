@@ -44,6 +44,13 @@ jobs:
           report-junit: output/tdm-validate.junit.xml
           manifest-artifact: tdm-validate-manifest
 
+      # The editor model must not drift from the actual resolved schema (W4-D2 risk
+      # mitigation): regenerate tdm.model.json and fail if it differs from the committed one.
+      - name: Model export drift check
+        run: |
+          dotnet run --project src/Tdm.Host --no-build -- export-model --settings tdm.settings.json --out tdm.model.json
+          git diff --exit-code tdm.model.json
+
       - name: Upload SARIF (PR annotations)
         if: ${{ always() && hashFiles('output/tdm-validate.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4

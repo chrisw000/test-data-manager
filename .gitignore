@@ -15,3 +15,6 @@ TestResults/
 artifacts/
 # mkdocs build output (built by the docs workflow)
 docs-site/site/
+# VS Code extension build output (editors/vscode)
+node_modules/
+*.vsix

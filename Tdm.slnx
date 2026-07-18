@@ -4,6 +4,7 @@
     <Project Path="src/Tdm.EfCore/Tdm.EfCore.csproj" />
     <Project Path="src/Tdm.Host/Tdm.Host.csproj" />
     <Project Path="src/Tdm.Identity/Tdm.Identity.csproj" />
+    <Project Path="src/Tdm.Lsp/Tdm.Lsp.csproj" />
     <Project Path="src/Tdm.Observability/Tdm.Observability.csproj" />
     <Project Path="src/Tdm.Plugins/Tdm.Plugins.csproj" />
     <Project Path="src/Tdm.Policy/Tdm.Policy.csproj" />
@@ -17,6 +18,7 @@
     <Project Path="tests/Tdm.Core.Tests/Tdm.Core.Tests.csproj" />
     <Project Path="tests/Tdm.EfCore.Tests/Tdm.EfCore.Tests.csproj" />
     <Project Path="tests/Tdm.Integration.Tests/Tdm.Integration.Tests.csproj" />
+    <Project Path="tests/Tdm.Lsp.Tests/Tdm.Lsp.Tests.csproj" />
     <Project Path="tests/Tdm.Observability.Tests/Tdm.Observability.Tests.csproj" />
     <Project Path="tests/Tdm.Plugins.Tests/Tdm.Plugins.Tests.csproj" />
     <Project Path="tests/Tdm.Policy.Tests/Tdm.Policy.Tests.csproj" />

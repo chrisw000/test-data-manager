@@ -117,6 +117,43 @@ initCommand.SetAction(parseResult => InitScaffolder.Execute(
     Path.GetFullPath(parseResult.GetValue(initDirOption)!),
     parseResult.GetValue(initDomainOption), parseResult.GetValue(initPackageOption)));
 
+var exportOutOption = new Option<string>("--out")
+{
+    Description = "Output path for the model file",
+    DefaultValueFactory = _ => "tdm.model.json",
+};
+var exportModelCommand = new Command("export-model",
+    "Serialise the resolved entity map (logical names, properties, natural keys, domains) to tdm.model.json (W4-D2) — " +
+    "the offline model `tdm lsp` validates against. Deterministic output: regenerate in CI and fail on diff to catch staleness.")
+{
+    settingsOption, exportOutOption,
+};
+exportModelCommand.SetAction(async (parseResult, ct) =>
+{
+    var composer = HostComposer.Create(parseResult.GetValue(settingsOption)!, null, null, null, null);
+    return await composer.ExportModelAsync(parseResult.GetValue(exportOutOption)!, ct);
+});
+
+var lspModelOption = new Option<string>("--model")
+{
+    Description = "Path to the exported model file (see `tdm export-model`); reloaded automatically when it changes",
+    DefaultValueFactory = _ => "tdm.model.json",
+};
+var lspCommand = new Command("lsp",
+    "Run the TDM language server on stdio (W4-D2/W4-D3): live StepGrammar diagnostics, entity/property completion " +
+    "and verb hover for feature files, validated against tdm.model.json — no database connection. " +
+    "Launched by editor clients (VS Code extension in editors/vscode), not interactively.")
+{
+    lspModelOption,
+};
+lspCommand.SetAction(async (parseResult, ct) =>
+{
+    var server = new Tdm.Lsp.LspServer(Console.OpenStandardInput(), Console.OpenStandardOutput(),
+        Path.GetFullPath(parseResult.GetValue(lspModelOption)!));
+    await server.RunAsync(ct);
+    return 0;
+});
+
 var stepArgument = new Argument<string>("step") { Description = "The step text, e.g. \"an Order exists for Customer \\\"Acme Ltd\\\"\"" };
 var keywordOption = new Option<string>("--keyword") { Description = "Gherkin keyword context", DefaultValueFactory = _ => "Given" };
 var explainCommand = new Command("explain", "Explain every pipeline decision for a single step: grammar rule, entity resolution, faker, persistence route, identity. No database connection.")
@@ -320,6 +357,8 @@ root.Subcommands.Add(verifyCommand);
 root.Subcommands.Add(benchCommand);
 root.Subcommands.Add(publishCommand);
 root.Subcommands.Add(reportCommand);
+root.Subcommands.Add(exportModelCommand);
+root.Subcommands.Add(lspCommand);
 
 try
 {
@@ -727,6 +766,29 @@ namespace Tdm.Host
                     _log.LogWarning("No bulkChunkSize property found in {File} — add \"bulkChunkSize\": {Chunk} to the run section.",
                         _settingsFilePath, best.Chunk);
                 }
+                return 0;
+            }
+            finally
+            {
+                await DisposeRuntimesAsync(runtimes, plugins);
+            }
+        }
+
+        /// <summary>`tdm export-model` (W4-D2): the model is built from the same resolved
+        /// runtimes as `list-entities`, so editor tooling cannot drift from engine resolution.
+        /// Model building is offline — no database connection is opened.</summary>
+        public async Task<int> ExportModelAsync(string outPath, CancellationToken ct)
+        {
+            var (runtimes, plugins) = await BuildRuntimesAsync(ct);
+            try
+            {
+                var settingsSha = Convert.ToHexStringLower(
+                    System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(_settingsFilePath)));
+                var model = Tdm.Core.Model.TdmModelBuilder.Build(runtimes, settingsSha);
+                var fullPath = Path.GetFullPath(outPath, _baseDirectory);
+                File.WriteAllText(fullPath, model.Serialize());
+                _log.LogInformation("Model exported: {Path} ({Domains} domain(s), {Entities} entities)",
+                    fullPath, model.Domains.Count, model.Domains.Sum(d => d.Entities.Count));
                 return 0;
             }
             finally

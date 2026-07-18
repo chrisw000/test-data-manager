@@ -1,0 +1,224 @@
+{
+  "modelVersion": 1,
+  "tdmVersion": "0.1.0",
+  "settingsFileSha256": "5971c635485e69d733826c33fbe8e06fc95be7975b5a08d6ba27f6ec0ea1bf54",
+  "domains": [
+    {
+      "name": "Billing",
+      "entities": [
+        {
+          "name": "Account",
+          "clrType": "Acme.Billing.Data.Infrastructure.AccountModel",
+          "naturalKey": "Name",
+          "key": "Id:Guid (Deterministic)",
+          "fakerSource": "AccountFaker",
+          "properties": [
+            {
+              "name": "Active",
+              "type": "bool"
+            },
+            {
+              "name": "Balance",
+              "type": "decimal"
+            },
+            {
+              "name": "Currency",
+              "type": "string"
+            },
+            {
+              "name": "Id",
+              "type": "Guid"
+            },
+            {
+              "name": "Name",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "CustomerSummary",
+          "clrType": "Acme.Billing.Data.Infrastructure.CustomerSummaryModel",
+          "naturalKey": "Name",
+          "key": "Id:Guid (Deterministic)",
+          "fakerSource": "auto",
+          "properties": [
+            {
+              "name": "Id",
+              "type": "Guid"
+            },
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Tier",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "Invoice",
+          "clrType": "Acme.Billing.Data.Infrastructure.InvoiceModel",
+          "naturalKey": "InvoiceNumber",
+          "key": "Id:Int32 (db-generated)",
+          "fakerSource": "auto",
+          "properties": [
+            {
+              "name": "AccountId",
+              "type": "Guid"
+            },
+            {
+              "name": "Amount",
+              "type": "decimal"
+            },
+            {
+              "name": "CustomerId",
+              "type": "Guid"
+            },
+            {
+              "name": "Id",
+              "type": "int"
+            },
+            {
+              "name": "InvoiceNumber",
+              "type": "string"
+            },
+            {
+              "name": "IssuedDate",
+              "type": "DateTime"
+            },
+            {
+              "name": "Status",
+              "type": "InvoiceStatus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "entities": [
+        {
+          "name": "Customer",
+          "clrType": "Acme.Orders.Data.Persistence.Domain.CustomerEntity",
+          "naturalKey": "Name",
+          "key": "Id:Guid (Deterministic)",
+          "fakerSource": "CustomerFaker",
+          "properties": [
+            {
+              "name": "CreatedUtc",
+              "type": "DateTime"
+            },
+            {
+              "name": "CreditLimit",
+              "type": "decimal"
+            },
+            {
+              "name": "Email",
+              "type": "string"
+            },
+            {
+              "name": "Id",
+              "type": "Guid"
+            },
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Tier",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "Order",
+          "clrType": "Acme.Orders.Data.Persistence.Domain.OrderEntity",
+          "naturalKey": "OrderNumber",
+          "key": "Id:Guid (Deterministic)",
+          "fakerSource": "auto",
+          "properties": [
+            {
+              "name": "CustomerId",
+              "type": "Guid"
+            },
+            {
+              "name": "Id",
+              "type": "Guid"
+            },
+            {
+              "name": "OrderDate",
+              "type": "DateTime"
+            },
+            {
+              "name": "OrderNumber",
+              "type": "string"
+            },
+            {
+              "name": "Status",
+              "type": "OrderStatus"
+            },
+            {
+              "name": "Total",
+              "type": "decimal"
+            }
+          ]
+        },
+        {
+          "name": "Product",
+          "clrType": "Acme.Orders.Domain.Catalog.ProductEntity",
+          "naturalKey": "Sku",
+          "key": "Id:Guid (Deterministic)",
+          "fakerSource": "ProductFaker",
+          "properties": [
+            {
+              "name": "Category",
+              "type": "string"
+            },
+            {
+              "name": "Discontinued",
+              "type": "bool"
+            },
+            {
+              "name": "Id",
+              "type": "Guid"
+            },
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Price",
+              "type": "decimal"
+            },
+            {
+              "name": "Sku",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "Warehouse",
+          "clrType": "Acme.Orders.Data.Persistence.Domain.WarehouseEntity",
+          "naturalKey": "Name",
+          "key": "Id:Guid (Deterministic)",
+          "fakerSource": "auto",
+          "properties": [
+            {
+              "name": "Id",
+              "type": "Guid"
+            },
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Region",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

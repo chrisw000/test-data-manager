@@ -1,0 +1,43 @@
+{
+  "name": "tdm-features",
+  "displayName": "TDM Feature Files",
+  "description": "Diagnostics, completion and hover for TDM Gherkin feature files, powered by `tdm lsp` and the exported tdm.model.json entity model.",
+  "version": "0.1.0",
+  "publisher": "tdm",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrisw000/test-data-manager"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "workspaceContains:tdm.settings.json"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "TDM",
+      "properties": {
+        "tdm.toolPath": {
+          "type": "string",
+          "default": "tdm",
+          "description": "Path to the tdm executable (the dotnet tool). The language server is launched as `<toolPath> lsp`."
+        },
+        "tdm.modelPath": {
+          "type": "string",
+          "default": "tdm.model.json",
+          "description": "Workspace-relative path to the exported entity model (see `tdm export-model`)."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

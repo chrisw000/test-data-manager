@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>TDM language server (stdio): live StepGrammar diagnostics, entity/property completion and verb hover for feature files, validated against the tdm.model.json exported entity model. Hand-rolled LSP framing — no server framework dependency.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tdm.Core\Tdm.Core.csproj" />
+  </ItemGroup>
+
+</Project>
