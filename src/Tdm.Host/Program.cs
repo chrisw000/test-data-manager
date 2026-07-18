@@ -27,7 +27,7 @@ var updatePluginsOption = new Option<bool>("--update-plugins")
 };
 var reportOption = new Option<string[]>("--report")
 {
-    Description = "Additionally emit the manifest as <format>=<path>; formats: sarif, junit. Repeatable.",
+    Description = "Additionally emit the manifest as <format>=<path>; formats: sarif, junit, html. Repeatable.",
     Arity = ArgumentArity.ZeroOrMore,
 };
 var envOption = new Option<string?>("--env")
@@ -256,6 +256,58 @@ benchCompareCommand.SetAction(async (parseResult, ct) =>
 });
 var benchCommand = new Command("bench", "Benchmark utilities.") { benchTuneCommand, benchCompareCommand };
 
+var htmlOutOption = new Option<string?>("--html")
+{
+    Description = "Output path (default: next to the manifest, .html for .tdm.json)",
+};
+var reportStoreOption = new Option<string?>("--store")
+{
+    Description = "Trend store root (W3-D7) — adds trend sparklines from the stored history of this run name + environment.",
+};
+var trendRunsOption = new Option<int>("--trend-runs")
+{
+    Description = "How many stored runs the trend sparklines cover",
+    DefaultValueFactory = _ => 10,
+};
+var trendStatOption = new Option<string>("--stat")
+{
+    Description = "Stat charted in the trend sparklines: meanMs | p50Ms | p95Ms | maxMs | totalMs",
+    DefaultValueFactory = _ => "p95Ms",
+};
+var reportCommand = new Command("report",
+    "Render a manifest as a single self-contained HTML file (W4-D1): run header, scenario drill-down, " +
+    "reference lineage graph, benchmark charts and (with --store) trend sparklines. No server, no external assets.")
+{
+    manifestOption, htmlOutOption, reportStoreOption, envOption, trendRunsOption, trendStatOption, verifyCertOption,
+};
+reportCommand.SetAction(async (parseResult, ct) =>
+{
+    var manifestPath = Path.GetFullPath(parseResult.GetValue(manifestOption)!);
+    var manifest = ManifestWriter.Read(manifestPath);
+    var options = new Tdm.Observability.Reports.HtmlReportOptions
+    {
+        TrendStat = parseResult.GetValue(trendStatOption)!,
+        SignatureStatus = Tdm.Observability.Audit.ManifestSigner
+            .Verify(manifestPath, parseResult.GetValue(verifyCertOption)).Message,
+    };
+    if (parseResult.GetValue(reportStoreOption) is { } storeRoot)
+    {
+        var store = new Tdm.Observability.Trends.FileSystemTrendStore(storeRoot);
+        var environment = parseResult.GetValue(envOption) ?? manifest.Run.Environment ?? "default";
+        options.TrendHistory = await store.ReadRecentAsync(environment, manifest.Run.Name,
+            parseResult.GetValue(trendRunsOption), ct);
+    }
+    var outPath = parseResult.GetValue(htmlOutOption) is { } explicitOut
+        ? Path.GetFullPath(explicitOut)
+        : manifestPath.EndsWith(".tdm.json", StringComparison.OrdinalIgnoreCase)
+            ? manifestPath[..^".tdm.json".Length] + ".html"
+            : manifestPath + ".html";
+    Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+    File.WriteAllText(outPath, Tdm.Observability.Reports.HtmlReport.Render(manifest, options));
+    Console.WriteLine($"Report written: {outPath}");
+    return 0;
+});
+
 root.Subcommands.Add(runCommand);
 root.Subcommands.Add(validateCommand);
 root.Subcommands.Add(teardownCommand);
@@ -267,6 +319,7 @@ root.Subcommands.Add(replayCommand);
 root.Subcommands.Add(verifyCommand);
 root.Subcommands.Add(benchCommand);
 root.Subcommands.Add(publishCommand);
+root.Subcommands.Add(reportCommand);
 
 try
 {

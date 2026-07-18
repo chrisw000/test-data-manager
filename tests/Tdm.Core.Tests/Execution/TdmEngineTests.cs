@@ -136,7 +136,10 @@ public class TdmEngineTests
         var gadget = runtime.Store["Gadget"][0].Should().BeOfType<Gadget>().Subject;
         gadget.WidgetId.Should().Be(widget.Id);
         var scenario = manifest.Scenarios.Should().ContainSingle().Subject;
-        scenario.References.Should().ContainSingle().Which.ResolvedFrom.Should().Be("contextBag");
+        var reference = scenario.References.Should().ContainSingle().Subject;
+        reference.ResolvedFrom.Should().Be("contextBag");
+        // Lineage-edge source (W4-D1): the reference belongs to the Gadget entry.
+        reference.SourceOrdinal.Should().Be(scenario.Entities.Single(e => e.Entity == "Gadget").Ordinal);
     }
 
     [Fact]
@@ -193,6 +196,7 @@ public class TdmEngineTests
         var external = manifest.Scenarios[0].References.First(r => r.ResolvedFrom == "identityContract");
         external.OwningDomain.Should().Be("CRM");
         external.Id.Should().Be(expected.ToString());
+        external.SourceOrdinal.Should().BeNull("the declaration only publishes an identity — it is applied to no entity");
         // Nothing persisted in the owning domain — no Widget row was created.
         runtime.Store["Widget"].Should().BeEmpty();
     }

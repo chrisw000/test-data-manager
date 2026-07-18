@@ -173,6 +173,10 @@ public sealed class BulkOperationManifest
 public sealed class ReferenceManifest
 {
     public int Step { get; set; }
+    /// <summary>Ordinal of the scenario entity this reference was applied to (W4-D1) —
+    /// the lineage-graph edge source. Null for external-reference declarations, which
+    /// only publish an identity into the context bag.</summary>
+    public int? SourceOrdinal { get; set; }
     /// <summary>"Entity:naturalKey".</summary>
     public string Target { get; set; } = "";
     /// <summary>contextBag | database | identityContract | dry-run-skipped.</summary>

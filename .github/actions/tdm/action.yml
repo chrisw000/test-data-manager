@@ -28,6 +28,9 @@ inputs:
   report-junit:
     description: 'Emit a JUnit XML report to this path'
     default: ''
+  report-html:
+    description: 'Emit the self-contained living-doc HTML report (W4-D1) to this path; uploaded with the manifest artifact'
+    default: ''
   manifest-artifact:
     description: 'Build-artifact name for the run manifest(s); empty disables upload'
     default: 'tdm-manifest'
@@ -59,6 +62,7 @@ runs:
           [ -n "${{ inputs.seed }}" ]      && ARGS+=(--seed "${{ inputs.seed }}")
           [ -n "${{ inputs['report-sarif'] }}" ] && ARGS+=(--report "sarif=${{ inputs['report-sarif'] }}")
           [ -n "${{ inputs['report-junit'] }}" ] && ARGS+=(--report "junit=${{ inputs['report-junit'] }}")
+          [ -n "${{ inputs['report-html'] }}" ]  && ARGS+=(--report "html=${{ inputs['report-html'] }}")
         fi
 
         set +e
@@ -77,5 +81,7 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs['manifest-artifact'] }}
-        path: ${{ inputs['manifest-path'] }}
+        path: |
+          ${{ inputs['manifest-path'] }}
+          ${{ inputs['report-html'] }}
         if-no-files-found: ignore

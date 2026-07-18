@@ -277,11 +277,12 @@ public class ReportGoldenTests
     {
         ReportEmitter.ParseSpec("sarif=./out/x.sarif").Should().Be(("sarif", "./out/x.sarif"));
         ReportEmitter.ParseSpec("JUNIT=results.xml").Should().Be(("junit", "results.xml"));
+        ReportEmitter.ParseSpec("html=report.html").Should().Be(("html", "report.html"));
 
-        foreach (var bad in new[] { "sarif", "=x", "html=x.html", "sarif=" })
+        foreach (var bad in new[] { "sarif", "=x", "csv=x.csv", "sarif=" })
         {
             FluentActions.Invoking(() => ReportEmitter.ParseSpec(bad))
-                .Should().Throw<ArgumentException>().Which.Message.Should().Contain("sarif, junit");
+                .Should().Throw<ArgumentException>().Which.Message.Should().Contain("sarif, junit, html");
         }
     }
 

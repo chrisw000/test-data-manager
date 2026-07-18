@@ -5,7 +5,7 @@ namespace Tdm.Observability.Reports;
 /// <summary>Dispatches host `--report &lt;format&gt;=&lt;path&gt;` specs to the emitters (W1-D3).</summary>
 public static class ReportEmitter
 {
-    public static readonly IReadOnlyList<string> Formats = ["sarif", "junit"];
+    public static readonly IReadOnlyList<string> Formats = ["sarif", "junit", "html"];
 
     /// <summary>Parses "sarif=./out/tdm.sarif" — throws a user-actionable error otherwise.</summary>
     public static (string Format, string Path) ParseSpec(string spec)
@@ -28,6 +28,9 @@ public static class ReportEmitter
         {
             "sarif" => SarifReport.Render(manifest, baseDirectory),
             "junit" => JUnitReport.Render(manifest),
+            // Trend sparklines and signature status need the trend store / manifest side
+            // files — `tdm report` supplies them; the inline emitter renders without.
+            "html" => HtmlReport.Render(manifest),
             _ => throw new ArgumentException($"Unknown report format '{format}'."),
         };
         var fullPath = Path.GetFullPath(path);

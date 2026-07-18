@@ -412,7 +412,7 @@ public sealed class TdmEngine(
             {
                 var instance = Generate(state, runtime, descriptor, entry);
                 ApplyOverrides(state, descriptor, instance, overrides, entry);
-                await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
+                await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, entry, ct).ConfigureAwait(false);
                 ApplyIdentity(state, runtime, descriptor, instance, ordinal, entry);
 
                 // Resume (W3-D6): the journal proves this ordinal was persisted — generation
@@ -567,7 +567,7 @@ public sealed class TdmEngine(
             {
                 var instance = Generate(state, runtime, descriptor, entry);
                 ApplyOverrides(state, descriptor, instance, step.Overrides, entry);
-                await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
+                await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, entry, ct).ConfigureAwait(false);
                 ApplyIdentity(state, runtime, descriptor, instance, ordinal, entry);
                 // Resume (W3-D6): journalled-persisted rows ride the chunk for manifest
                 // sampling but are excluded from the write — re-bulk-inserting them would
@@ -772,7 +772,7 @@ public sealed class TdmEngine(
             if (instance is null) { FinishEntry(state, entry, entitySw); return; }
 
             ApplyOverrides(state, descriptor, instance, step.Overrides, entry);
-            await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, ct).ConfigureAwait(false);
+            await ApplyReferencesAsync(state, runtime, descriptor, instance, step.References, step, entry, ct).ConfigureAwait(false);
 
             if (state.IsResumed(entry.Ordinal))
             {
@@ -1178,7 +1178,7 @@ public sealed class TdmEngine(
 
     private async Task ApplyReferencesAsync(ScenarioState state, IDomainRuntime runtime,
         EntityDescriptor descriptor, object instance, List<ReferenceClause> references,
-        StepPlan step, CancellationToken ct)
+        StepPlan step, EntityManifest sourceEntry, CancellationToken ct)
     {
         foreach (var clause in references)
         {
@@ -1186,6 +1186,7 @@ public sealed class TdmEngine(
             var reference = new ReferenceManifest
             {
                 Step = step.Line,
+                SourceOrdinal = sourceEntry.Ordinal,
                 Target = $"{NameMatcher.Singularize(clause.Entity)}:{clause.Key}",
             };
 
