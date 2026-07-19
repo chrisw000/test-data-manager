@@ -1,0 +1,52 @@
+/* W5-D5 identity explorer + multi-domain map — Material CSS variables only, so both
+ * components follow the light/dark palette toggle with no scheme-specific rules. */
+
+/* ── identity explorer ─────────────────────────────────────────────────── */
+#tdm-identity-explorer { margin: 1.5em 0; }
+.tdm-ix-inputs { display: flex; flex-wrap: wrap; gap: 0.6em 1em; }
+.tdm-ix-field { display: flex; flex-direction: column; font-size: 0.72rem; gap: 0.2em; }
+.tdm-ix-field > span { color: var(--md-default-fg-color--light); }
+.tdm-ix-field input {
+  font: inherit; font-family: var(--md-code-font-family, monospace); padding: 0.3em 0.5em;
+  border: 1px solid var(--md-default-fg-color--lightest); border-radius: 0.25em;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color); min-width: 140px;
+}
+.tdm-ix-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4em; margin: 0.7em 0; }
+.tdm-ix-plabel { font-size: 0.68rem; color: var(--md-default-fg-color--light); }
+.tdm-ix-preset {
+  font: inherit; font-size: 0.66rem; font-family: var(--md-code-font-family, monospace);
+  padding: 0.25em 0.6em; cursor: pointer; border-radius: 1em;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-code-bg-color); color: var(--md-default-fg-color);
+}
+.tdm-ix-preset:hover { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
+.tdm-ix-name, .tdm-ix-uuid {
+  font-family: var(--md-code-font-family, monospace); font-size: 0.82rem; margin-top: 0.4em;
+}
+.tdm-ix-dim { color: var(--md-default-fg-color--light); }
+.tdm-ix-id { color: var(--md-accent-fg-color); font-size: 0.95rem; }
+.tdm-ix-steps { margin-top: 0.7em; font-size: 0.72rem; }
+.tdm-ix-steps summary { cursor: pointer; color: var(--md-default-fg-color--light); }
+.tdm-ix-stepbody {
+  white-space: pre-wrap; font-family: var(--md-code-font-family, monospace); font-size: 0.7rem;
+  margin-top: 0.5em; padding: 0.6em 0.8em; border-radius: 0.25em;
+  background: var(--md-code-bg-color); border: 1px solid var(--md-default-fg-color--lightest);
+  overflow-x: auto;
+}
+
+/* ── multi-domain map ──────────────────────────────────────────────────── */
+#tdm-multi-domain-map { margin: 1.5em 0; }
+.tdm-mm-svg { width: 100%; height: auto; display: block; }
+.tdm-mm-lane { fill: none; stroke: var(--md-default-fg-color--lightest); }
+.tdm-mm-title { fill: var(--md-default-fg-color); font-weight: 600; font-size: 15px; }
+.tdm-mm-box, .tdm-mm-db { fill: var(--md-code-bg-color); stroke: var(--md-default-fg-color--lightest); }
+.tdm-mm-mono { fill: var(--md-default-fg-color); font-family: var(--md-code-font-family, monospace); font-size: 12px; }
+.tdm-mm-dim { fill: var(--md-default-fg-color--light); font-family: var(--md-code-font-family, monospace); font-size: 10.5px; }
+.tdm-mm-edge { stroke: var(--md-default-fg-color--light); stroke-width: 2; fill: none; stroke-dasharray: 6 4; cursor: pointer; }
+.tdm-mm-edge:focus { outline: none; }
+.tdm-mm-edge-hot { stroke: var(--md-accent-fg-color); stroke-width: 3; stroke-dasharray: none; }
+.tdm-mm-arrowhead { fill: var(--md-default-fg-color--light); }
+.tdm-mm-readout {
+  margin-top: 0.5em; font-size: 0.72rem; font-family: var(--md-code-font-family, monospace);
+  color: var(--md-default-fg-color--light);
+}

@@ -1,0 +1,18 @@
+{
+  // Fulfilment's natural-key registry (W2-D6). Fulfilment references Orders' Order by
+  // number; those keys are declared by the Orders package. Here we declare the keys
+  // Fulfilment itself owns and keeps stable for anyone referencing us.
+  "registryVersion": 1,
+  "domain": "Fulfilment",
+  "entities": {
+    "Location": {
+      "naturalKey": "Code",
+      "keys": ["SITE-1", "AISLE-A", "AISLE-B", "BIN-A1", "BIN-A2", "BIN-B1"]
+    },
+    "Shipment": {
+      "naturalKey": "ShipmentNumber",
+      "keys": [],
+      "keyPattern": "^SHP-\\d{4,6}$"
+    }
+  }
+}

@@ -35,6 +35,22 @@
       "externalReferences": "Synthesize",
       "ensureCreated": true
     }
+    // W5-D7: the Acme.Fulfilment complex-example domain (self-referencing hierarchy,
+    // server-assigned long key, enum state flow, DateOnly/TimeOnly, correlated dataset,
+    // three-domain identity chain) is kept OUT of the default demo run to hold its runtime
+    // down. It has its own workspace — docs-verify seeds it on every push; the "Testing
+    // complex domains" guide walks it. To include it here, add:
+    // {
+    //   "name": "Fulfilment",
+    //   "package": "Acme.Fulfilment.Data",
+    //   "pluginPath": "tests/Acme.Fulfilment.Data/bin/Debug/net10.0",
+    //   "provider": "Sqlite",
+    //   "connectionString": "Data Source=./output/fulfilment-demo.db",
+    //   "conventionProfile": "modern",
+    //   "persistence": "RepositoryFirst",
+    //   "externalReferences": "Synthesize",
+    //   "ensureCreated": true
+    // }
   ],
   "entities": {
     // Product has no write repository by design — explicit policy exemption (docs/adr-0001).

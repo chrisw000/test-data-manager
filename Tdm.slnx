@@ -15,6 +15,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Acme.Billing.Data.Infrastructure/Acme.Billing.Data.Infrastructure.csproj" />
+    <Project Path="tests/Acme.Fulfilment.Data/Acme.Fulfilment.Data.csproj" />
     <Project Path="tests/Tdm.Api.Tests/Tdm.Api.Tests.csproj" />
     <Project Path="tests/Acme.Orders.Data.Persistence/Acme.Orders.Data.Persistence.csproj" />
     <Project Path="tests/Tdm.Core.Tests/Tdm.Core.Tests.csproj" />

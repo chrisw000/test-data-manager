@@ -74,6 +74,9 @@ markdown_extensions:
 extra_css:
   - assets/interactive/pipeline-walkthrough.css
   - assets/interactive/distribution-playground.css
+  - assets/interactive/multi-domain.css
 extra_javascript:
   - assets/interactive/pipeline-walkthrough.js
   - assets/interactive/distribution-playground.js
+  - assets/interactive/identity-explorer.js
+  - assets/interactive/multi-domain-map.js

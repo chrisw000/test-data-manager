@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Complex-example sample domain (W5-D7, "modern" profile): self-referencing hierarchy, server-assigned long key, enum-heavy state flow, DateOnly/TimeOnly, a correlated dataset, and a three-domain identity chain (Orders → Billing → Fulfilment). Exists to be documented by the "Testing complex domains" guide; CI builds and seeds it on the SQLite leg.</Description>
+    <!-- Self-contained bin output so the folder can be plugin-loaded by the TDM host. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bogus" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- W2-D6: the key registry ships alongside the plugin's build output. -->
+    <None Include="tdm.keys.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

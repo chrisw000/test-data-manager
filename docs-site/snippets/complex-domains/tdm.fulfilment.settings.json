@@ -1,0 +1,47 @@
+{
+  // Isolated Fulfilment workspace — the complex-example domain (W5-D7). Built and seeded
+  // on the SQLite leg in docs-verify; the "Testing complex domains" guide walks the
+  // feature this runs, case by case. pluginPath/featurePaths/datasets resolve against this
+  // file's directory; the SQLite Data Source is process-cwd-relative (the repo root).
+  "run": {
+    "name": "fulfilment-demo",
+    "failurePolicy": "FailRun",
+    "lifecycle": "TrackedTeardown",
+    "defaultSeed": 21,
+    "featurePaths": ["fulfilment.feature"],
+    "outputPath": "../../../output"
+  },
+  "domains": [
+    {
+      "name": "Fulfilment",
+      "package": "Acme.Fulfilment.Data",
+      "pluginPath": "../../../tests/Acme.Fulfilment.Data/bin/Debug/net10.0",
+      "provider": "Sqlite",
+      "connectionString": "Data Source=./output/fulfilment-demo.db",
+      "conventionProfile": "modern",
+      "persistence": "RepositoryFirst",
+      "externalReferences": "Synthesize",
+      "ensureCreated": true
+    }
+  ],
+  "datasets": {
+    "carriers": { "path": "datasets/carriers.csv" }
+  },
+  "entities": {
+    "Location": { "naturalKey": "Code" },
+    "Shipment": {
+      // Server-assigned long key: TDM records the DB-assigned id, matches rows by number.
+      "naturalKey": "ShipmentNumber",
+      "idStrategy": "DbGenerated",
+      // No write repository by design — persists via DbContext (captures the assigned id).
+      "requireRepository": false,
+      "properties": {
+        // Enum-heavy state flow as a realistic weighted mix.
+        "Status": { "weights": { "Delivered": 0.5, "InTransit": 0.25, "Dispatched": 0.15, "Exception": 0.1 } },
+        // Correlated pair from one sampled dataset row — carrier and service level agree.
+        "Carrier":      { "dataset": "carriers", "column": "Carrier" },
+        "ServiceLevel": { "dataset": "carriers", "column": "ServiceLevel" }
+      }
+    }
+  }
+}
