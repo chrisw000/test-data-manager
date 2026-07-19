@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/chrisw000/test-data-manager/main/docs/schemas/tdm.policy.schema.json",
+  "policyVersion": 1,
+  "environments": {
+    "perf": {
+      "benchmarks": {
+        "gates": [
+          { "operation": "persist:Product", "stat": "p95Ms", "maxRegressionPct": 300 }
+        ]
+      }
+    }
+  }
+}

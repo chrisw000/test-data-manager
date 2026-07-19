@@ -1,0 +1,25 @@
+{
+  // Isolated workspace so `tdm profile` has a stable, seeded database to read.
+  "run": {
+    "name": "profile-demo",
+    "lifecycle": "Persistent",
+    "defaultSeed": 7,
+    "featurePaths": ["seed.feature"],
+    "outputPath": "../../../output"
+  },
+  "domains": [
+    {
+      "name": "Orders",
+      "package": "Acme.Orders.Data.Persistence",
+      "pluginPath": "../../../tests/Acme.Orders.Data.Persistence/bin/Debug/net10.0",
+      "provider": "Sqlite",
+      "connectionString": "Data Source=./output/profile-demo.db",
+      "conventionProfile": "modern",
+      "persistence": "RepositoryFirst",
+      "ensureCreated": true
+    }
+  ],
+  "entities": {
+    "Product": { "naturalKey": "Sku", "requireRepository": false }
+  }
+}

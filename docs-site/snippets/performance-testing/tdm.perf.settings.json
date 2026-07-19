@@ -1,0 +1,30 @@
+{
+  // Isolated single-domain workspace for the performance walkthrough (docs-verify).
+  // pluginPath/featurePaths resolve against this file's directory; the SQLite Data Source
+  // is process-cwd-relative (the repo root, where the harness runs).
+  "run": {
+    "name": "perf-demo",
+    "failurePolicy": "FailRun",
+    "lifecycle": "Persistent",
+    "defaultSeed": 99,
+    "featurePaths": ["perf.feature"],
+    "benchmark": true,
+    "bulkChunkSize": 500,
+    "outputPath": "../../../output"
+  },
+  "domains": [
+    {
+      "name": "Orders",
+      "package": "Acme.Orders.Data.Persistence",
+      "pluginPath": "../../../tests/Acme.Orders.Data.Persistence/bin/Debug/net10.0",
+      "provider": "Sqlite",
+      "connectionString": "Data Source=./output/perf-demo.db",
+      "conventionProfile": "modern",
+      "persistence": "RepositoryFirst",
+      "ensureCreated": true
+    }
+  ],
+  "entities": {
+    "Product": { "naturalKey": "Sku", "requireRepository": false }
+  }
+}

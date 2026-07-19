@@ -1,0 +1,34 @@
+/* W5-D5 distribution playground — Material CSS variables only, so light/dark follow the
+ * palette toggle with no scheme-specific rules. */
+#tdm-distribution-playground { margin: 1.5em 0; }
+
+.tdm-dp-controls {
+  display: flex; flex-wrap: wrap; gap: 0.6em 1.2em; align-items: flex-end;
+  padding: 0.8em 1em; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3em; background: var(--md-code-bg-color);
+}
+.tdm-dp-field { display: flex; flex-direction: column; font-size: 0.72rem; gap: 0.2em; }
+.tdm-dp-field > span { color: var(--md-default-fg-color--light); }
+.tdm-dp-field select, .tdm-dp-field input[type="range"] { font: inherit; }
+.tdm-dp-field input[type="range"] { width: 150px; accent-color: var(--md-primary-fg-color); }
+.tdm-dp-check { flex-direction: row; align-items: center; gap: 0.4em; }
+.tdm-dp-btn {
+  font: inherit; font-size: 0.72rem; padding: 0.35em 0.8em; cursor: pointer;
+  border: 1px solid var(--md-default-fg-color--lightest); border-radius: 0.3em;
+  background: var(--md-default-bg-color); color: var(--md-default-fg-color);
+}
+.tdm-dp-btn:hover { border-color: var(--md-accent-fg-color); color: var(--md-accent-fg-color); }
+
+.tdm-dp-chart {
+  margin-top: 0.8em; border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3em; padding: 0.6em;
+}
+.tdm-dp-svg { width: 100%; height: auto; display: block; }
+.tdm-dp-bar { fill: var(--md-primary-fg-color); opacity: 0.85; }
+.tdm-dp-median { stroke: var(--md-accent-fg-color); stroke-width: 2; stroke-dasharray: 4 3; }
+.tdm-dp-medlabel { fill: var(--md-accent-fg-color); font-size: 12px; font-family: var(--md-code-font-family, monospace); }
+
+.tdm-dp-readout {
+  margin-top: 0.5em; font-size: 0.72rem; font-family: var(--md-code-font-family, monospace);
+  color: var(--md-default-fg-color--light);
+}
