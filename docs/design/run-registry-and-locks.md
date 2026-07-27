@@ -1,6 +1,6 @@
 # Run registry and environment locks (W2-P3)
 
-Part of [Wave 2](wave-2-handoff.md), decision W2-D7: a **thin lease + index service**
+Part of [Wave 2 — Trust](README.md), decision W2-D7: a **thin lease + index service**
 (`Tdm.Registry`) that answers the cross-team question — *who seeded shared-dev, when, with
 what* — and stops two runs from seeding the same database at once. The registry links to
 manifests; it never duplicates their content.

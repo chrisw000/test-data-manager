@@ -19,7 +19,7 @@ starting point with `tdm init`.
   "manifestBulkSampleRows": 5,       // rows kept with full values at each end in Sample mode
   "maxParallelScenarios": 1,         // >1 runs scenarios concurrently (W3-D1); steps stay sequential
   "outputPath": "./output",          // manifests land here
-  "signing": {                       // optional — see docs/audit-and-signing.md
+  "signing": {                       // optional — see docs/design/audit-and-signing.md
     "certificatePath": "./keys/tdm-signing.pfx",
     "certificatePasswordEnv": "TDM_SIGNING_CERT_PASSWORD"
   }
@@ -38,13 +38,13 @@ starting point with `tdm init`.
   through provider-native inserters (SqlBulkCopy, SQLite multi-row INSERT, PostgreSQL binary COPY) with the EF path
   as fallback; `Sample` mode keeps manifests usable at a million rows (head/tail values +
   count + value hash). See
-  [bulk-and-streaming](https://github.com/chrisw000/test-data-manager/blob/main/docs/bulk-and-streaming.md).
+  [bulk-and-streaming](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/bulk-and-streaming.md).
 - **maxParallelScenarios** — the scenario is the unit of parallelism; manifests record
   scenarios in plan order regardless of completion order, and per-scenario seeds keep the
   data identical to a serial run. Any domain's own `maxParallelScenarios` caps the run's;
   Transactional scenarios on SQLite auto-serialise with a warning (single-writer). Best for
   disjoint seeding — see
-  [parallel-execution](https://github.com/chrisw000/test-data-manager/blob/main/docs/parallel-execution.md).
+  [parallel-execution](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/parallel-execution.md).
 
 ## plugins
 
@@ -111,7 +111,7 @@ fails validation.
 ```
 
 See the [API seeding guide](../guides/api-seeding.md) and
-[api-seeding.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/api-seeding.md)
+[api-seeding.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/api-seeding.md)
 (engineering record).
 
 ## entities
@@ -165,7 +165,7 @@ seed — realistic shapes, still deterministic. Step overrides always win. Exact
 | `dataset` / `column` | fill from a named [dataset](#datasets) row; column defaults to the property name |
 
 Engineering record:
-[statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/statistical-generation.md).
+[statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/statistical-generation.md).
 
 ## datasets
 
@@ -219,7 +219,7 @@ hash) — the attestation posture stays truthful about production-derived shapes
 Connection strings (`connectionStringName`), the signing-certificate password, and the
 registry API key all resolve through this chain: inline → environment → adapter. TDM ships
 no cloud SDKs and stores nothing — see
-[secrets-and-playback](https://github.com/chrisw000/test-data-manager/blob/main/docs/secrets-and-playback.md).
+[secrets-and-playback](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/secrets-and-playback.md).
 
 ## registry
 
@@ -236,12 +236,12 @@ no cloud SDKs and stores nothing — see
 When set, `tdm run` registers the run and leases every domain's target database before
 seeding — two runs targeting the same database collide, and the second fails fast naming the
 holder. See
-[run-registry-and-locks](https://github.com/chrisw000/test-data-manager/blob/main/docs/run-registry-and-locks.md).
+[run-registry-and-locks](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/run-registry-and-locks.md).
 
 ## Policy as code and the key registry
 
 Opt-in, CLI-driven (not part of `tdm.settings.json`) — see
-[policy-and-key-registry](https://github.com/chrisw000/test-data-manager/blob/main/docs/policy-and-key-registry.md)
+[policy-and-key-registry](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/policy-and-key-registry.md)
 for the full rule set:
 
 ```bash

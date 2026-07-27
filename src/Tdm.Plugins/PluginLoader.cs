@@ -66,7 +66,7 @@ public sealed class PluginLoader(IPluginAcquirer acquirer, ILogger? logger = nul
                     $"EF version skew for domain '{domain.Name}': plugin assembly '{assembly.GetName().Name}' was built " +
                     $"against Microsoft.EntityFrameworkCore {pluginEf.Version} but the TDM host ships {hostEf}. " +
                     "Rebuild the domain data package against the org EF baseline, or align the TDM host version. " +
-                    "Compatibility matrix: https://github.com/chrisw000/test-data-manager/blob/main/docs/compatibility.md");
+                    "Compatibility matrix: https://github.com/chrisw000/test-data-manager/blob/main/docs/design/compatibility.md");
             }
         }
     }

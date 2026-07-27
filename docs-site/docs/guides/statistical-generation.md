@@ -131,7 +131,7 @@ Returning `null` falls through to the next plugin, then the heuristics.
   synthetic-only by construction.
 
 !!! info "Engineering record"
-    [statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/statistical-generation.md).
+    [statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/statistical-generation.md).
 
 ## Where next
 

@@ -49,7 +49,7 @@ public sealed class RunInfo
     public Dictionary<string, string> SeedPacks { get; set; } = [];
     public Dictionary<string, BenchmarkStats> Benchmark { get; set; } = [];
     /// <summary>Who/what ran this and against which config (W2-D1). Consumed alongside the
-    /// checksum/signature written next to the manifest file — see docs/audit-and-signing.md.</summary>
+    /// checksum/signature written next to the manifest file — see docs/design/audit-and-signing.md.</summary>
     public AttributionInfo Attribution { get; set; } = new();
     /// <summary>Synthetic-data attestation (W2-D1): classifies every generator source used in
     /// the run. All sources are synthetic by construction in v1.</summary>

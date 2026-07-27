@@ -127,7 +127,7 @@ public sealed class RunSettings
 /// Secret resolution (W2-D8): inline (dev only, when configured) → environment → optionally
 /// a named cloud provider. Used for connection strings, the manifest-signing certificate
 /// password, and registry auth. TDM never stores secrets and ships no cloud SDKs — cloud
-/// adapters implement Tdm.Core.Secrets.ISecretProvider (see docs/secrets-and-playback.md).
+/// adapters implement Tdm.Core.Secrets.ISecretProvider (see docs/design/secrets-and-playback.md).
 /// </summary>
 public sealed class SecretsSettings
 {

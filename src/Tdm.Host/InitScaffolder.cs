@@ -95,7 +95,7 @@ internal static class InitScaffolder
     private static string SettingsTemplate(string domain, string? package) => $$"""
         {
           // Test Data Manager settings — full reference:
-          // https://github.com/chrisw000/test-data-manager (docs/compatibility.md, docs-site/)
+          // https://github.com/chrisw000/test-data-manager (docs/design/compatibility.md, docs-site/)
           "run": {
             "name": "{{domain.ToLowerInvariant()}}-seed",
             // BestEffort: log failures and continue | FailObject: skip the failed object | FailRun: abort

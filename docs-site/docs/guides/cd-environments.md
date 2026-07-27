@@ -34,7 +34,7 @@ docs-verify job against the sample workspace):
 ```
 
 The rules per environment (full schema:
-[policy-and-key-registry.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/policy-and-key-registry.md)):
+[policy-and-key-registry.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/policy-and-key-registry.md)):
 
 | Rule | Effect |
 |---|---|
@@ -75,7 +75,7 @@ Registry refusal: Database for domain 'Orders' is locked by billing-team nightly
 - **`registry.unavailable`** — `Warn` continues without locks, `Fail` refuses (exit 2). A
   *lock conflict* is always fatal regardless — that is the point.
 
-Details: [run-registry-and-locks.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/run-registry-and-locks.md).
+Details: [run-registry-and-locks.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/run-registry-and-locks.md).
 
 ## Secrets
 
@@ -88,7 +88,7 @@ inline (dev only) → environment → a host-registered cloud adapter:
 - **Signing-cert password** (`run.signing.certificatePasswordEnv`) and the **registry API
   key** (`registry.apiKeyEnv`) resolve through the same chain.
 
-See [secrets-and-playback.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/secrets-and-playback.md)
+See [secrets-and-playback.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/secrets-and-playback.md)
 and the [configuration reference](../reference/configuration.md#secrets).
 
 ## Post-deploy verification & custody

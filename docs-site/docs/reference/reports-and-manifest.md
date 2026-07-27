@@ -131,9 +131,9 @@ external assets. Attach it to a CI run and it works forever.
 
 !!! info "Engineering record"
     Design docs:
-    [living-report.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/living-report.md),
-    [audit-and-signing.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/audit-and-signing.md),
-    [resume-and-trends.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/resume-and-trends.md).
+    [living-report.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/living-report.md),
+    [audit-and-signing.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/audit-and-signing.md),
+    [resume-and-trends.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/resume-and-trends.md).
 
 ## Where next
 

@@ -1,6 +1,6 @@
 # Manifest audit hardening (W2-P1)
 
-Part of [Wave 2](wave-2-handoff.md): makes the run manifest safe to treat as evidence, not
+Part of [Wave 2 — Trust](README.md): makes the run manifest safe to treat as evidence, not
 just a log. Three additions, all opt-in beyond the checksum which is always written.
 
 ## Attribution
@@ -50,8 +50,7 @@ For real tamper-evidence, configure detached-signature signing:
 The private key never touches disk-backed key storage (loaded with
 `X509KeyStorageFlags.EphemeralKeySet`), so this works unmodified in containers and CI agents
 with no writable user profile. Without `run.signing` configured, TDM operates in
-**checksum-only mode** — a documented, acceptable posture for orgs without PKI (see the risk
-table in [wave-2-handoff.md](wave-2-handoff.md)).
+**checksum-only mode** — a documented, acceptable posture for orgs without PKI.
 
 ## `tdm manifest verify`
 

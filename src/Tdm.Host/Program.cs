@@ -182,7 +182,7 @@ var fragmentOption = new Option<string?>("--fragment")
 var profileCommand = new Command("profile",
     "W4-D8 spike (prototype, not GA): connect read-only to a production-like source and emit a statistics pack — " +
     "per-column distributions, cardinalities, correlation hints, never row values. Feed the fragment into " +
-    "entities.{X}.properties (see docs/subsetting-spike.md; data-protection review required before use on real production data).")
+    "entities.{X}.properties (see docs/design/subsetting-spike.md; data-protection review required before use on real production data).")
 {
     settingsOption, domainOption, profileSampleOption, categoricalMaxOption, noValuesOption, profileOutOption, fragmentOption,
 };
@@ -489,7 +489,7 @@ namespace Tdm.Host
                     foreach (var violation in violations)
                         _log.LogError("Policy violation: {Violation}", violation);
                     _log.LogError("{Count} write-repository policy violation(s) — fix the repositories or add explicit " +
-                                  "entities.{{Name}}.requireRepository: false exemptions in the settings file (see docs/adr-0001).",
+                                  "entities.{{Name}}.requireRepository: false exemptions in the settings file (see docs/design/adr-0001-data-access-via-repositories.md).",
                         violations.Count);
                     return 2;
                 }

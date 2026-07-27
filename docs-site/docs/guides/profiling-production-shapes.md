@@ -15,7 +15,7 @@ the sanctioned route: it reads a production-like source and emits **shapes, neve
     reads what a connection can see, but it is still pointed at real systems — treat it
     accordingly, and read the [risk conversation](#the-risk-conversation) before using it
     on anything real. Engineering record:
-    [subsetting-spike.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/subsetting-spike.md).
+    [subsetting-spike.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/subsetting-spike.md).
 
 ## What it captures — and refuses
 

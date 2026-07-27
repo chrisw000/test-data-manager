@@ -28,7 +28,7 @@ public static class SecretChainFactory
                     $"secrets.provider is '{settings.Provider}' but no such ISecretProvider is available. " +
                     "TDM ships the Environment provider only; cloud adapters (Azure Key Vault, AWS Secrets Manager) " +
                     "implement Tdm.Core.Secrets.ISecretProvider and are registered by the embedding host — " +
-                    "see docs/secrets-and-playback.md.");
+                    "see docs/design/secrets-and-playback.md.");
             providers.Add(named);
         }
         return new SecretChain(providers);

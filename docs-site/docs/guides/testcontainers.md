@@ -46,7 +46,7 @@ The same idea applies to `tdm run`: point the domain's connection string at a co
   `ensureCreated` off.
 - **PostgreSQL** ships as a provider *plugin* (`Tdm.Providers.PostgreSql`); SQLite and
   SQL Server are in-box. Any `IProviderBootstrap` in a plugin folder is discovered the same
-  way — see [providers](https://github.com/chrisw000/test-data-manager/blob/main/docs/providers.md).
+  way — see [providers](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/providers.md).
 
 ## The CI recipe
 

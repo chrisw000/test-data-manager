@@ -88,7 +88,7 @@ if it drifts from the resolved schema.
 ```
 
 This repository runs exactly that check ([CI guide](ci.md)); the design rationale is in
-[editor-support.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/editor-support.md).
+[editor-support.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/editor-support.md).
 
 ## Where next
 

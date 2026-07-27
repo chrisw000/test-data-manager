@@ -31,7 +31,7 @@ and install the `.vsix`). Settings:
 The model file is re-read live whenever it changes. If it was exported from a different
 `tdm.settings.json` than the workspace's current one, a staleness banner offers to
 regenerate it — CI should also regenerate and `git diff --exit-code` it (see
-`docs/editor-support.md`).
+`docs/design/editor-support.md`).
 
 Other LSP-capable editors (Rider, Neovim, Helix) can use `tdm lsp --model tdm.model.json`
 directly — stdio, no arguments beyond the model path.

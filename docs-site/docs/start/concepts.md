@@ -69,9 +69,9 @@ are captured from the same commands CI runs; ask for them yourself with:
 
 !!! info "Engineering record"
     The design docs behind this pipeline:
-    [statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/statistical-generation.md),
-    [policy-and-key-registry.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/policy-and-key-registry.md),
-    [living-report.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/living-report.md).
+    [statistical-generation.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/statistical-generation.md),
+    [policy-and-key-registry.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/policy-and-key-registry.md),
+    [living-report.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/living-report.md).
 
 ## Where next
 

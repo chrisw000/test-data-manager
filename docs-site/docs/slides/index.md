@@ -17,6 +17,5 @@ The deck is one self-contained HTML file, dogfooding TDM's own report posture:
 - The identity mini-explorer on slide 7 derives UUIDv5 ids live and self-verifies
   against the frozen `Tdm.Identity` contract vector on load.
 
-The deck is written from the same
-[messaging spine](https://github.com/chrisw000/test-data-manager/blob/main/docs/wave-5/messaging.md)
-as this site's home page, so the two cannot tell diverging stories.
+The deck is written from the same framing as this site's [home page](../index.md), so the
+two cannot tell diverging stories.

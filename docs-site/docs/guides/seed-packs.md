@@ -65,7 +65,7 @@ coordinating at runtime.
   packs exist to kill — the moment two copies drift, their ids can diverge.
 
 !!! info "Engineering record"
-    [seed-packs.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/seed-packs.md).
+    [seed-packs.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/seed-packs.md).
 
 ## Where next
 

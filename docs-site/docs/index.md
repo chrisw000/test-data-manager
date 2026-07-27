@@ -81,6 +81,6 @@ single step through the whole pipeline, stage by stage.
   see [CI](guides/ci.md).
 
 !!! info "Engineering record"
-    The design docs behind every feature live in
-    [`/docs`](https://github.com/chrisw000/test-data-manager/tree/main/docs) — each guide
-    links the decisions it stands on.
+    The design records behind every feature live in
+    [`/docs/design`](https://github.com/chrisw000/test-data-manager/tree/main/docs/design) —
+    each guide links the decisions it stands on.

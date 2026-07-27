@@ -81,7 +81,7 @@ server.Requests.Should().Contain(r => r.PathAndQuery == "/api/shipments");
 assert the exact calls TDM makes — including that teardown deletes in reverse order.
 
 !!! info "Engineering record"
-    [api-seeding.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/api-seeding.md).
+    [api-seeding.md](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/api-seeding.md).
 
 ## Where next
 

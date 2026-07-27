@@ -1,6 +1,6 @@
 # Policy as code and the natural-key registry (W2-P2)
 
-Part of [Wave 2](wave-2-handoff.md): two independent, validate-time governance checks that
+Part of [Wave 2 — Trust](README.md): two independent, validate-time governance checks that
 run before any persistence. Both are statically evaluated against the parsed feature plan —
 no database connection, no execution.
 

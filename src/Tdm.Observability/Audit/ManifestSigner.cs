@@ -26,8 +26,8 @@ public sealed record VerifyOutcome(VerifyStatus Status, string Message)
 /// <summary>
 /// Manifest tamper-evidence (W2-D2): a SHA-256 checksum is always written next to the
 /// manifest; an optional detached RSA signature over an X.509 private key adds real
-/// tamper-evidence for orgs with PKI ("checksum-only mode" otherwise — see the risk table
-/// in wave-2-handoff.md). <see cref="Verify"/> is the corresponding `tdm manifest verify` check.
+/// tamper-evidence for orgs with PKI ("checksum-only mode" otherwise — see
+/// docs/design/audit-and-signing.md). <see cref="Verify"/> is the corresponding `tdm manifest verify` check.
 /// </summary>
 public static class ManifestSigner
 {

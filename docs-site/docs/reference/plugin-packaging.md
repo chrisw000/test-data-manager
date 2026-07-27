@@ -23,7 +23,7 @@ The `DbContext` must be constructible by TDM: a constructor taking
 
 1. **EF baseline**: build against the same `Microsoft.EntityFrameworkCore` major/minor as
    the TDM host ships (see the
-   [compatibility matrix](https://github.com/chrisw000/test-data-manager/blob/main/docs/compatibility.md)).
+   [compatibility matrix](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/compatibility.md)).
    Version skew fails fast at plugin load, naming both versions.
 2. **Don't pack host-shared dependencies**: framework assemblies, EF Core,
    `Microsoft.Extensions.*`, `Microsoft.Data.*`, `SQLitePCLRaw`, `Bogus` and `Tdm.*` are
@@ -33,7 +33,7 @@ The `DbContext` must be constructible by TDM: a constructor taking
    (e.g. `Tdm.Providers.PostgreSql` for `"provider": "PostgreSql"`) are **not**
    host-provided — declare the one your domain targets as a dependency and it loads from
    your plugin folder
-   ([providers](https://github.com/chrisw000/test-data-manager/blob/main/docs/providers.md)).
+   ([providers](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/providers.md)).
 3. **Natural keys are contract**: the property TDM uses as the business key
    (`entities.{Name}.naturalKey`) feeds the cross-team identity contract
    `UUIDv5("{domain}|{Entity}|{naturalKey}")`. Renaming it is a breaking change for every
