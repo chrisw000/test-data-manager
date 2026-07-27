@@ -7,7 +7,7 @@ deterministic synthetic data via Bogus, applies per-scenario overrides, and pers
 repository or DbContext — with structured logging, OpenTelemetry instrumentation, a
 machine-readable seeding manifest, and benchmark timings.
 
-Built to the design in [`tdm-handoff.md`](tdm-handoff.md) (all phases P1–P4).
+Built to the design in [`docs/design/tdm-handoff.md`](docs/design/tdm-handoff.md) (all phases P1–P4).
 
 ## Documentation
 

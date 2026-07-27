@@ -1,7 +1,7 @@
 # Decision log
 
 Full details live in the repository:
-[`tdm-handoff.md`](https://github.com/chrisw000/test-data-manager/blob/main/tdm-handoff.md) (v1, D1–D14),
+[`tdm-handoff.md`](https://github.com/chrisw000/test-data-manager/blob/main/docs/design/tdm-handoff.md) (v1, D1–D14),
 and the per-feature **design records** under
 [`docs/design/`](https://github.com/chrisw000/test-data-manager/tree/main/docs/design) — each
 one keyed to the wave-decision it realises (see that folder's

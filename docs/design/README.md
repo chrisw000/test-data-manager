@@ -10,13 +10,15 @@ how to *use* it.
 
 Not decision records in the strict ADR sense (only `adr-0001` follows the
 context/decision/consequences form) — most are design specs that carry the rationale for
-the choice inline. The `tdm-handoff.md` at the repo root holds the original v1 decisions
-(D1–D14); everything from Wave 2 on has a record here.
+the choice inline. `tdm-handoff.md` (below) holds the original v1 decisions (D1–D14);
+everything from Wave 2 on has its own record.
 
 Listed in the order the decisions were arrived at.
 
 ## Foundational
 
+- [`tdm-handoff.md`](tdm-handoff.md) *(v1)* — the original implementation handoff: the whole
+  v1 design and its decisions D1–D14 (the tool as first shipped, before the waves).
 - [`adr-0001-data-access-via-repositories.md`](adr-0001-data-access-via-repositories.md) —
   TDM writes through your write repositories (audit stamps, validation, events live there),
   not straight to the `DbContext`. Enforced by the `validate` policy gate; exemptions are

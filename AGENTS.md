@@ -83,8 +83,8 @@ The per-feature design/decision records are in [`docs/design/`](docs/design/) wi
 
 ## Where the design is written down
 
-- [`docs/design/`](docs/design/) — per-feature design records (this repo's design of record).
-- [`tdm-handoff.md`](tdm-handoff.md) — the original v1 implementation handoff (decisions
-  D1–D14).
+- [`docs/design/`](docs/design/) — per-feature design records (this repo's design of record),
+  including [`tdm-handoff.md`](docs/design/tdm-handoff.md), the original v1 implementation
+  handoff (decisions D1–D14).
 - The published site: <https://chrisw000.github.io/test-data-manager/> (guides + reference +
   the agent kit).
