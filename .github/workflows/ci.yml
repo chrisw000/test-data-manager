@@ -103,6 +103,9 @@ jobs:
       - name: Guided-tour chain lint
         run: bash docs-site/lint-tour.sh
 
+      - name: Design-doc cross-link audit (no orphaned design docs)
+        run: bash docs-site/lint-doclinks.sh
+
       - name: Execute guide snippets against the sample workspace
         run: bash docs-site/run-snippets.sh
 

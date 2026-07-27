@@ -38,6 +38,9 @@ nav:
       - Seed packs: guides/seed-packs.md
       - TestContainers & the provider matrix: guides/testcontainers.md
       - Testing complex domains: guides/complex-domains.md
+  - Agents:
+      - Overview: agents/index.md
+      - The agent-kit (verbatim): agents/kit.md
   - Slides:
       - Engineering Forum deck: slides/index.md
   - Reference:
@@ -60,8 +63,11 @@ markdown_extensions:
   # W5-D4: guide commands are included from docs-site/snippets/*.sh — the same files
   # the docs-verify CI job executes against the sample workspace. check_paths makes a
   # missing snippet a build error, not a silently empty code block.
+  # W5-P6 adds agent-kit to base_path so the Agents pages render the shipped kit files
+  # verbatim (single-sourced from agent-kit/ — site and shipped kit cannot diverge). Both
+  # forms cover building from the repo root (CI) and from docs-site/ (local).
   - pymdownx.snippets:
-      base_path: ['docs-site/snippets', 'snippets']
+      base_path: ['docs-site/snippets', 'snippets', 'agent-kit', '../agent-kit']
       check_paths: true
   # Mermaid diagrams render client-side from Material's bundled copy — no CDN, matching
   # the zero-external-dependency posture (W5-D1).

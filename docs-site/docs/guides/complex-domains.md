@@ -1,5 +1,6 @@
 ---
 tour_prev: guides/testcontainers.md
+tour_next: agents/index.md
 ---
 
 # Testing complex domains
@@ -125,6 +126,7 @@ A checklist when onboarding a domain with these shapes:
   chain relies on.
 - [Statistical generation](statistical-generation.md) — the weights and dataset config
   used above.
-- Back to [the guided tour](../start/tour.md) — you've reached the last stop.
+- [Agents & the agent-kit](../agents/index.md) — hand this whole product to an agentic
+  coder or tester.
 
-**Guided tour:** this is the final stop — back to [the tour index](../start/tour.md).
+**Guided tour:** next stop → [Agents & the agent-kit](../agents/index.md)

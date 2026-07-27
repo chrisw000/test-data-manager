@@ -109,13 +109,15 @@ listEntitiesCommand.SetAction(async (parseResult, ct) =>
 var initDomainOption = new Option<string?>("--domain") { Description = "Domain name to pre-fill (default: MyDomain)" };
 var initPackageOption = new Option<string?>("--package") { Description = "NuGet package id of the domain data assembly to pre-fill" };
 var initDirOption = new Option<string>("--dir") { Description = "Target directory", DefaultValueFactory = _ => "." };
+var initAgentsOption = new Option<bool>("--agents") { Description = "Also scaffold the agent-kit (AGENTS.md + skills/) for agentic coders" };
 var initCommand = new Command("init", "Scaffold tdm.settings.json, a starter feature, .gitignore and a CI validate workflow.")
 {
-    initDomainOption, initPackageOption, initDirOption,
+    initDomainOption, initPackageOption, initDirOption, initAgentsOption,
 };
 initCommand.SetAction(parseResult => InitScaffolder.Execute(
     Path.GetFullPath(parseResult.GetValue(initDirOption)!),
-    parseResult.GetValue(initDomainOption), parseResult.GetValue(initPackageOption)));
+    parseResult.GetValue(initDomainOption), parseResult.GetValue(initPackageOption),
+    parseResult.GetValue(initAgentsOption)));
 
 var exportOutOption = new Option<string>("--out")
 {

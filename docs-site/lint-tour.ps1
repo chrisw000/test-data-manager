@@ -4,7 +4,9 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot 'docs')
 
 $members = @('start/getting-started.md', 'start/concepts.md') +
-    (Get-ChildItem guides -Filter *.md | Sort-Object Name | ForEach-Object { "guides/$($_.Name)" })
+    (Get-ChildItem guides -Filter *.md | Sort-Object Name | ForEach-Object { "guides/$($_.Name)" }) +
+    # W5-P6: the agent-kit overview is the tour's final stop (the last persona is your agent).
+    @('agents/index.md')
 
 function Fail([string]$message) { Write-Error "lint-tour: $message"; exit 1 }
 

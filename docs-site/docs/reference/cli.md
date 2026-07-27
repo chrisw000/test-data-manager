@@ -73,6 +73,7 @@ workflow. Existing files are never overwritten.
 | `--domain <name>` | Domain name to pre-fill (default: `MyDomain`) |
 | `--package <id>` | NuGet package id of the domain data assembly to pre-fill |
 | `--dir <path>` | Target directory (default: `.`) |
+| `--agents` | Also scaffold the [agent-kit](../agents/index.md) (`AGENTS.md` + `skills/`), with the domain name substituted for the template's placeholder |
 
 ## `tdm explain`
 

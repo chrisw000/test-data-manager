@@ -1,13 +1,23 @@
+using System.Reflection;
+
 namespace Tdm.Host;
 
 /// <summary>
 /// `tdm init` (W1-D5): scaffolds an annotated tdm.settings.json, a starter feature
-/// exercising create/load, a .gitignore, and a CI workflow snippet. Flags-only; never
-/// overwrites an existing file — each file is reported as written or skipped.
+/// exercising create/load, a .gitignore, and a CI workflow snippet. With --agents (W5-P6)
+/// it also scaffolds the agent-kit (AGENTS.md + skills/) for agentic coders, substituting
+/// the domain name for the kit's placeholders. Flags-only; never overwrites an existing
+/// file — each file is reported as written or skipped.
 /// </summary>
 internal static class InitScaffolder
 {
-    public static int Execute(string directory, string? domain, string? package)
+    /// <summary>The placeholder domain name the embedded agent-kit templates carry.</summary>
+    internal const string DomainPlaceholder = "YourDomain";
+
+    /// <summary>Logical-name prefix of the embedded agent-kit resources (see Tdm.Host.csproj).</summary>
+    private const string KitResourcePrefix = "agent-kit/";
+
+    public static int Execute(string directory, string? domain, string? package, bool agents = false)
     {
         var domainName = domain ?? "MyDomain";
         Directory.CreateDirectory(directory);
@@ -17,15 +27,58 @@ internal static class InitScaffolder
         WriteIfAbsent(Path.Combine(directory, ".gitignore"), GitIgnoreTemplate);
         WriteIfAbsent(Path.Combine(directory, ".github", "workflows", "tdm-validate.yml"), CiTemplate);
 
+        if (agents)
+        {
+            ScaffoldAgentKit(directory, domainName);
+        }
+
         Console.WriteLine();
         Console.WriteLine("Next steps:");
         Console.WriteLine($"  1. Drop your domain data assemblies into ./plugins/{domainName}");
         Console.WriteLine("     (or configure plugins.acquisition: \"NuGet\" + plugins.feeds in tdm.settings.json).");
         Console.WriteLine("  2. Adjust the starter feature to your entities.");
         Console.WriteLine("  3. Run: tdm validate");
+        if (!agents)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Tip: add --agents to also scaffold AGENTS.md + skills/ for agentic coders.");
+        }
         Console.WriteLine("Docs: https://github.com/chrisw000/test-data-manager");
         return 0;
     }
+
+    /// <summary>
+    /// Writes the embedded agent-kit into <paramref name="directory"/>, substituting the
+    /// domain name for the templates' placeholders. Single-sourced from <c>agent-kit/</c>
+    /// (embedded resources), so it cannot drift from the docs site's rendered copies.
+    /// </summary>
+    internal static IReadOnlyList<string> ScaffoldAgentKit(string directory, string domain)
+    {
+        var written = new List<string>();
+        var assembly = typeof(InitScaffolder).Assembly;
+        var resources = assembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith(KitResourcePrefix, StringComparison.Ordinal))
+            .OrderBy(n => n, StringComparer.Ordinal);
+
+        foreach (var resource in resources)
+        {
+            var relative = resource.Substring(KitResourcePrefix.Length)
+                .Replace('/', Path.DirectorySeparatorChar);
+            using var stream = assembly.GetManifestResourceStream(resource)
+                ?? throw new InvalidOperationException($"Embedded agent-kit resource missing: {resource}");
+            using var reader = new StreamReader(stream);
+            var content = Substitute(reader.ReadToEnd(), domain);
+            var target = Path.Combine(directory, relative);
+            WriteIfAbsent(target, content);
+            written.Add(target);
+        }
+        return written;
+    }
+
+    /// <summary>Replaces the kit's domain placeholders (PascalCase and lowercase) with the target domain.</summary>
+    internal static string Substitute(string content, string domain) => content
+        .Replace(DomainPlaceholder, domain, StringComparison.Ordinal)
+        .Replace(DomainPlaceholder.ToLowerInvariant(), domain.ToLowerInvariant(), StringComparison.Ordinal);
 
     private static void WriteIfAbsent(string path, string content)
     {

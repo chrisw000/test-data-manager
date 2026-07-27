@@ -9,10 +9,26 @@ machine-readable seeding manifest, and benchmark timings.
 
 Built to the design in [`tdm-handoff.md`](tdm-handoff.md) (all phases P1–P4).
 
-**Docs:** [chrisw000.github.io/test-data-manager](https://chrisw000.github.io/test-data-manager/) —
-start with the [≤15-minute Getting Started](https://chrisw000.github.io/test-data-manager/start/getting-started/).
-New to TDM? The [Engineering Forum deck](https://chrisw000.github.io/test-data-manager/slides/engineering-forum.html)
-lands the concept in twenty minutes (self-contained HTML — also opens from
+## Documentation
+
+Full docs — every feature, every command CI-executed so they cannot drift — live at
+**[chrisw000.github.io/test-data-manager](https://chrisw000.github.io/test-data-manager/)**.
+The home page routes you by persona; pick your path:
+
+- **QA / test author** → [Getting started](https://chrisw000.github.io/test-data-manager/start/getting-started/)
+  (≤15 min) → [Daily use for QAs](https://chrisw000.github.io/test-data-manager/guides/daily-use-qa/)
+- **Developer / domain owner** → [Getting started](https://chrisw000.github.io/test-data-manager/start/getting-started/)
+  → [Daily use for developers](https://chrisw000.github.io/test-data-manager/guides/daily-use-dev/)
+- **Platform / DevEx** → [CI — validate, report, gate](https://chrisw000.github.io/test-data-manager/guides/ci/)
+  → [CD & environments](https://chrisw000.github.io/test-data-manager/guides/cd-environments/)
+- **Agentic coder / tester** → [Agents & the agent-kit](https://chrisw000.github.io/test-data-manager/agents/)
+  (hand your agent [`agent-kit/`](agent-kit/), or scaffold it with `tdm init --agents`)
+
+Prefer to read everything in order? The
+[guided tour](https://chrisw000.github.io/test-data-manager/start/tour/) walks the whole
+product in about ninety minutes. New to the concept? The
+[Engineering Forum deck](https://chrisw000.github.io/test-data-manager/slides/engineering-forum.html)
+lands it in twenty (self-contained HTML — also opens from
 `docs-site/docs/slides/engineering-forum.html` with no network).
 
 ## Quick start

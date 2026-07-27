@@ -18,6 +18,20 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
   </ItemGroup>
 
+  <!-- W5-P6: the agent-kit is the single source of truth. Embed it so the init command's
+       agents flag scaffolds it into a consuming repo (README is maintenance-only, not
+       shipped). The docs site renders the same files via the snippet mechanism, so kit and
+       docs cannot diverge. LogicalName is normalised to forward slashes for portability. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\agent-kit\**\*" Exclude="..\..\agent-kit\README.md">
+      <LogicalName>agent-kit/$([System.String]::Copy('%(RecursiveDir)').Replace('\','/'))%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tdm.Host.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Tdm.Core\Tdm.Core.csproj" />
     <ProjectReference Include="..\Tdm.EfCore\Tdm.EfCore.csproj" />

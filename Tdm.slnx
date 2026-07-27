@@ -20,6 +20,7 @@
     <Project Path="tests/Acme.Orders.Data.Persistence/Acme.Orders.Data.Persistence.csproj" />
     <Project Path="tests/Tdm.Core.Tests/Tdm.Core.Tests.csproj" />
     <Project Path="tests/Tdm.EfCore.Tests/Tdm.EfCore.Tests.csproj" />
+    <Project Path="tests/Tdm.Host.Tests/Tdm.Host.Tests.csproj" />
     <Project Path="tests/Tdm.Integration.Tests/Tdm.Integration.Tests.csproj" />
     <Project Path="tests/Tdm.Lsp.Tests/Tdm.Lsp.Tests.csproj" />
     <Project Path="tests/Tdm.Observability.Tests/Tdm.Observability.Tests.csproj" />

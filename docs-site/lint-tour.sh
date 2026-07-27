@@ -8,6 +8,8 @@ cd "$(dirname "$0")/docs"
 
 members=(start/getting-started.md start/concepts.md)
 while IFS= read -r f; do members+=("$f"); done < <(find guides -name '*.md' | sort)
+# W5-P6: the agent-kit overview is the tour's final stop (the last persona is your agent).
+members+=(agents/index.md)
 
 declare -A tour_next tour_prev in_tour
 fail() { echo "lint-tour: $1" >&2; exit 1; }

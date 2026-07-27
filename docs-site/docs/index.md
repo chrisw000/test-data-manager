@@ -42,7 +42,7 @@ auditable** rows — no production data by default, generated values under a pin
 - **Agentic coder / tester** — you want a machine-legible loop:
   `validate → explain → run → read the manifest`, with structured outputs (SARIF, JUnit,
   JSON) and guardrails by default.
-  Start: [Getting started](start/getting-started.md) → the agent kit (arrives in W5-P6)
+  Start: [Agents & the agent-kit](agents/index.md) → scaffold it with `tdm init --agents`
 
 </div>
 
